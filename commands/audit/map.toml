@@ -1,0 +1,91 @@
+description = "Stage 1: Map out a set of contracts for analysis."
+
+prompt = """
+You are a senior Solidity security engineer.
+
+Task: Build a precise **system map** for the given Solidity contracts. Do **not** look for vulnerabilities yet.
+
+Threat model (for later stages; keep in mind when inferring invariants):
+- Privileged roles (owner, admin, governance, etc.) are **honest and aligned** with the protocol.
+- Later analysis will **discard** any finding that requires a privileged role to be malicious or to deliberately abuse clearly documented powers.
+
+### What to produce
+
+Produce a structured summary with three sections:
+
+1. Contracts
+2. Invariants
+3. Cross-contract flows
+
+#### 1. Contracts
+
+For each contract, produce:
+
+- `<ContractName>:`
+  - `Purpose:` 1-2 sentences describing what the contract is responsible for and what value/logic it controls.
+  - `Key state:` a short list of the most important state variables related to:
+    - balances / supplies
+    - limits / caps
+    - configuration that affects risk or value movement
+  - `Roles:` list roles and their powerful capabilities, or state “No privileged roles”.
+    - `<RoleName or "No privileged roles">: can call [func1, func2, ...]`  
+      Include only functions where calls materially move value or change risk.
+  - `External surface:` list externally callable functions:
+    - `<funcSignature> - Caller: <owner/admin|any>; Writes: [vars]; External calls: [brief description or "none"]`
+
+#### 2. Invariants
+
+List **3-10 important invariants**. Each invariant should:
+
+- Be a precise statement that “should always be true” assuming honest privileged roles.
+- Refer explicitly to variables or balances, not just vague goals.
+
+Examples of style (not actual content):
+- `TotalSupply(token) == sum of all user balances.`
+- `Collateral ratio for each position must remain >= X.`
+- `Sum of shares * pricePerShare == underlying balance within rounding error.`
+
+Format:
+
+- `Inv1: ...`
+- `Inv2: ...`
+- etc.
+
+Ensure at least one invariant per contract that holds valuable funds or critical logic.
+
+#### 3. Cross-contract flows
+
+List important call chains between contracts, in a compact form:
+
+- `<ContractA.func> -> <ContractB.func> -> ...`
+
+Only include flows that:
+- Move value, or
+- Change state related to the invariants, or
+- Are central to the system's intended behavior.
+
+### Output format (and nothing else)
+
+Follow this outline exactly:
+
+- Contracts:
+  - <ContractName>:
+    - Purpose: ...
+    - Key state: [ ... ]
+    - Roles:
+      - ...
+    - External surface:
+      - ...
+
+- Invariants:
+  - Inv1: ...
+  - Inv2: ...
+  - ...
+
+- Cross-contract flows:
+  - ...
+
+Now build this system map for the following Solidity contracts:
+
+{{args}}
+"""

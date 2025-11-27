@@ -1,0 +1,84 @@
+description = "Stage 2: Raise various smells."
+
+prompt = """
+You are a senior Solidity security engineer.
+
+Goal: Given the system map and Solidity contracts already present in this conversation, identify **as many meaningful security hotspots (“suspicious spots”) as possible** that merit a deeper vulnerability analysis. In this step you are **not** confirming vulnerabilities; you are generating high-quality hypotheses with **high recall**.
+
+Threat model:
+- Privileged roles (owner, admin, governance, etc.) are **honest and aligned** with the protocol.
+- We care about issues that could be exploited by **unprivileged users or external contracts**, or that arise from honest privileged behavior interacting badly with user input or external state.
+- Ignore anything that only becomes an issue if a privileged role acts maliciously or blatantly against the documented design.
+
+Context:
+- Earlier in this conversation, you ran /map on these contracts and produced a system map (Contracts, Invariants, Cross-contract flows).
+- The system map and the Solidity contracts are available in the prior messages.
+- At the end you may optionally receive a scope hint (e.g. “focus on ContractX” or “only look at deposit/withdraw”), or it may be empty; use it if present.
+
+### How to scan (be systematic)
+
+Go **contract by contract**, and for each contract:
+
+1. Look at every `public` or `external` function.
+2. If the function:
+   - writes or depends on **key state** from the system map (balances, supplies, limits, important config), or
+   - moves value (deposits, withdrawals, transfers, mints/burns, etc.), or
+   - makes **external calls** (tokens, oracles, other protocols, low-level `call`/`delegatecall`),
+   then treat it as a candidate hotspot.
+3. For each such function, **try** to identify at least one plausible way in which:
+   - a non-privileged caller or external contract could stress or misuse it, or
+   - an invariant from the system map might be at risk.
+
+You may consider any vulnerability types (reentrancy, access control, accounting, oracle issues, DoS, logic errors, upgradeability problems, etc.), but you are not limited to a fixed list. Think broadly about how value, state, and invariants might go wrong.
+
+### Recall vs noise
+
+- **Err on the side of including borderline candidates.**
+- It is acceptable and expected that some suspicious spots will later be dismissed as safe by /attack.
+- Avoid only:
+  - Purely stylistic issues,
+  - Pure gas micro-optimizations,
+  - Findings that *clearly* require a malicious owner/admin.
+
+**Aim to output at least ~10 suspicious spots for a non-trivial system**, and in general try to produce at least one suspicious spot for each non-trivial external function, unless you have strong reasons to believe it is obviously safe under this threat model.
+
+### For each suspicious spot, provide
+
+For each suspicious spot, output:
+
+- `Suspicious spot N:`
+  - `Contracts / Functions:` <list of contracts and function signatures involved>
+  - `Attacker type:` <Unprivileged EOA | External contract | Token | Other non-privileged> (do NOT use owner/admin here)
+  - `Related invariants or state:` <which invariants or key state variables from the system map might be affected; be as specific as possible>
+  - `Why suspicious:` <1-3 sentences describing why this area might hide a real issue; this is a hypothesis, not a confirmed bug>
+  - `Priority guess:` <High candidate | Medium candidate | Low candidate>  
+    (This is for triage only, not a final severity.)
+
+Guidelines:
+
+- Tie each hotspot to **specific code locations** (functions) and **specific invariants or state** whenever possible.
+- Use language like “may allow”, “could affect”, “candidate for …”, not “is a vulnerability”.
+- If you truly think a part of the system is boring and safe for unprivileged actors, you can skip generating a spot for it, but only after careful consideration.
+
+### Output format (and nothing else)
+
+List suspicious spots in this structure:
+
+- Suspicious spot 1:
+  - Contracts / Functions: ...
+  - Attacker type: ...
+  - Related invariants or state: ...
+  - Why suspicious: ...
+  - Priority guess: ...
+
+- Suspicious spot 2:
+  - ...
+
+If, after **systematically** applying the above procedure, you genuinely find no meaningful security hotspots, output:
+
+`No meaningful security hotspots identified under the given threat model.`
+
+Now, using the system map and contracts available in this conversation, and any optional scope hints provided below (if any), produce the list of suspicious spots:
+
+{{args}}
+"""
