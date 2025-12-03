@@ -1,26 +1,25 @@
 import { z } from "zod";
 import { encode } from "@toon-format/toon";
 import { Engine } from "../../engine/index.js";
-import type { CallToolResult, ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
-// Schema for the entrypoints tool
-export const entrypointsSchema = {
-    description: "List externally reachable entrypoints for a given set of files",
+export const peekSchema = {
+    description: "Extract function signatures from files to understand their purpose",
     inputSchema: {
         paths: z.array(z.string()).describe("File paths or glob patterns to analyze")
     }
 };
 
-export function createEntrypointsHandler(engine: Engine) {
+export function createPeekHandler(engine: Engine) {
     return async (
         { paths }: { paths: string[] }
     ): Promise<CallToolResult> => {
         try {
-            const entrypoints = await engine.processEntrypoints(paths);
+            const signatures = await engine.processSignatures(paths);
             return {
                 content: [{
                     type: "text",
-                    text: encode({ entrypoints })
+                    text: encode({ signatures })
                 }]
             };
         } catch (error) {

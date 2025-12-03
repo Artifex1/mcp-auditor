@@ -1,12 +1,23 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
 import { Engine } from "../engine/index.js";
 import { SolidityAdapter } from "../languages/solidityAdapter.js";
+import { CppAdapter } from "../languages/cppAdapter.js";
+import { JavaAdapter } from "../languages/javaAdapter.js";
+import { GoAdapter } from "../languages/goAdapter.js";
+import { RustAdapter } from "../languages/rustAdapter.js";
 import { createEntrypointsHandler, entrypointsSchema } from "./tools/entrypoints.js";
+import { createPeekHandler, peekSchema } from "./tools/peek.js";
+import { createMetricsHandler, metricsSchema } from "./tools/metrics.js";
 
 // Create and configure engine
 const engine = new Engine();
 engine.registerAdapter(new SolidityAdapter());
+engine.registerAdapter(new CppAdapter());
+engine.registerAdapter(new JavaAdapter());
+engine.registerAdapter(new GoAdapter());
+engine.registerAdapter(new RustAdapter());
 
 // Create server instance
 const server = new McpServer({
@@ -14,11 +25,22 @@ const server = new McpServer({
     version: "1.0.0",
 });
 
-// Register tools
 server.registerTool(
     "entrypoints",
     entrypointsSchema,
     createEntrypointsHandler(engine)
+);
+
+server.registerTool(
+    "peek",
+    peekSchema,
+    createPeekHandler(engine)
+);
+
+server.registerTool(
+    "metrics",
+    metricsSchema,
+    createMetricsHandler(engine)
 );
 
 async function main() {

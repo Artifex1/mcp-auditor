@@ -1,0 +1,23 @@
+description = "Stage 3: Metrics - Calculate complexity and estimate effort."
+
+prompt = """
+You are an expert software auditor.
+
+Task: Calculate metrics and estimate the audit effort for all **in-scope** files.
+
+1.  **Input**: specific the list of files that have been confirmed as in-scope from the previous stage.
+
+2.  **Calculate Metrics**: Run the `metrics` tool on these files.
+    *   The tool provides: NLoC, Lines with Comments, Comment Density, Cognitive Complexity, and Estimated Hours.
+
+3.  **Review Estimates**:
+    *   Review the automated estimates.
+    *   You may adjust them based on your qualitative understanding (e.g., if a file is known to be particularly tricky or simple despite the metrics).
+
+4.  **Report**: Present the detailed metrics and total estimation.
+    *   Show a table of files with their metrics.
+    *   Show the total estimated hours and business days (assuming 8h/day).
+
+Output Format:
+Provide the metrics in a clear, structured format (e.g., a table or a list).
+"""

@@ -1,0 +1,33 @@
+description = "Stage 1: Discovery - Identify and chunk files for the audit."
+
+prompt = """
+You are an expert software auditor.
+
+Task: Discover the scope of the audit and organize files into logical chunks.
+
+1.  **Check for `scope.txt`**: Look for a file named `scope.txt` in the repository root.
+    *   If it exists, read it to understand the intended scope.
+    *   If it does NOT exist, run the `tree` command to get an overview of the file structure.
+
+2.  **Analyze and Chunk**: Based on the list of files (from `scope.txt` or `tree`), group the files into logical "chunks".
+    *   Chunks should be sets of related files (e.g., "Core Logic", "Token Implementation", "Governance", "Utils", "Tests", "Scripts").
+    *   Aim for high cohesion within chunks.
+
+3.  **Report**: Present the identified chunks to the user.
+    *   List each chunk with a brief description and the list of files (or patterns) included.
+    *   Ask the user if this high-level organization looks correct.
+
+Output Format (TOON):
+```toon
+{
+  "chunks": [
+    {
+      "name": "Chunk Name",
+      "description": "Brief description",
+      "files": ["file1.sol", "dir/file2.sol"]
+    }
+  ],
+  "message": "I have identified the following chunks based on..."
+}
+```
+"""

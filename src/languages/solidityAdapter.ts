@@ -1,5 +1,6 @@
-import { LanguageAdapter, Entrypoint, FunctionInsights, FileContent, SupportedLanguage, CallGraph, GraphNode, GraphEdge } from "../engine/index.js";
+import { Entrypoint, FileContent, SupportedLanguage, CallGraph, GraphNode, GraphEdge } from "../engine/index.js";
 import { astGrep } from "../util/astGrepCli.js";
+import { BaseAdapter } from "./baseAdapter.js";
 
 interface ExtendedGraphNode extends GraphNode {
     text: string;
@@ -12,19 +13,66 @@ enum CallType {
     Super
 }
 
-export class SolidityAdapter implements LanguageAdapter {
-    languageId = SupportedLanguage.Solidity;
+export class SolidityAdapter extends BaseAdapter {
+    constructor() {
+        super({
+            languageId: SupportedLanguage.Solidity,
+            rules: {
+                comments: [
+                    { id: "comment", language: SupportedLanguage.Solidity, rule: { kind: "comment" } }
+                ],
+                functions: {
+                    id: "function",
+                    language: SupportedLanguage.Solidity,
+                    rule: {
+                        any: [
+                            { kind: "function_definition" },
+                            { kind: "fallback_receive_definition" }
+                        ]
+                    }
+                },
+                branching: {
+                    id: "branching",
+                    language: SupportedLanguage.Solidity,
+                    rule: {
+                        any: [
+                            { kind: "if_statement" },
+                            { kind: "for_statement" },
+                            { kind: "while_statement" },
+                            { kind: "do_while_statement" },
+                            { kind: "catch_clause" }
+                        ]
+                    }
+                },
+                normalization: [
+                    { id: "call_expression", language: SupportedLanguage.Solidity, rule: { kind: "call_expression" } },
+                    { id: "function_definition", language: SupportedLanguage.Solidity, rule: { kind: "function_definition" } }
+                ]
+            },
+            constants: {
+                baseRateNlocPerDay: 200,
+                complexityPenaltyThreshold: 10,
+                complexityPenaltyFactor: 0.5,
+                commentDensityBenefitThreshold: 20,
+                commentDensityBenefitFactor: 0.3
+            }
+        });
+    }
 
     private symbolTable: Map<string, ExtendedGraphNode> = new Map();
     private inheritanceGraph: Map<string, string[]> = new Map(); // child -> parents
     private usingForMap: Map<string, string[]> = new Map(); // contract -> libraries
 
+    // Optimization: Index symbols for faster lookups
+    private symbolsByContract: Map<string, ExtendedGraphNode[]> = new Map();
+    private symbolsByLabel: Map<string, ExtendedGraphNode[]> = new Map();
+
+    private static readonly BUILTIN_FUNCTIONS = new Set(['require', 'assert', 'revert', 'emit']);
+
     async extractEntrypoints(files: FileContent[]): Promise<Entrypoint[]> {
-        this.symbolTable.clear();
-        // Build the symbol table first
+        this.resetState();
         await this.buildSymbolTable(files);
 
-        // Filter for public and external functions
         return Array.from(this.symbolTable.values())
             .filter(node => node.visibility === 'public' || node.visibility === 'external')
             .map(node => ({
@@ -41,257 +89,245 @@ export class SolidityAdapter implements LanguageAdapter {
     }
 
 
-    async extractFunctionInsights(files: FileContent[], selector: any): Promise<FunctionInsights> {
-        // TODO: Implement
-        return {};
-    }
 
     async generateCallGraph(files: FileContent[]): Promise<CallGraph> {
-        this.symbolTable.clear();
-        this.inheritanceGraph.clear();
+        this.resetState();
         const edges: GraphEdge[] = [];
 
         // Phase 1: Symbol Table & Inheritance Generation
         await this.buildSymbolTable(files);
 
         // Phase 2: Call Identification
-        await this.identifyCalls(files, edges);
+        await this.identifyCalls(edges);
 
         return { nodes: Array.from(this.symbolTable.values()), edges };
     }
 
-    private async identifyCalls(files: FileContent[], edges: GraphEdge[]) {
+    private resetState() {
+        this.symbolTable.clear();
+        this.inheritanceGraph.clear();
+        this.usingForMap.clear();
+        this.symbolsByContract.clear();
+        this.symbolsByLabel.clear();
+    }
+
+    private indexSymbol(node: ExtendedGraphNode) {
+        this.symbolTable.set(node.id, node);
+
+        if (node.contract) {
+            const nodes = this.symbolsByContract.get(node.contract) || [];
+            nodes.push(node);
+            this.symbolsByContract.set(node.contract, nodes);
+        }
+
+        const nodes = this.symbolsByLabel.get(node.label) || [];
+        nodes.push(node);
+        this.symbolsByLabel.set(node.label, nodes);
+    }
+
+    private findInContract(contract: string, label: string): ExtendedGraphNode | undefined {
+        return this.symbolsByContract.get(contract)?.find(n => n.label === label);
+    }
+
+    private async identifyCalls(edges: GraphEdge[]) {
         for (const node of this.symbolTable.values()) {
-            // Rule 1: Process super calls - super.FUNC($$$)
-            const superCalls = await astGrep({
-                rule: {
-                    id: "super_call",
-                    language: "Solidity",
-                    rule: {
-                        kind: "call_expression",
-                        pattern: {
-                            context: "function f() { super.$FUNC($$$); }",
-                            selector: "call_expression"
-                        }
-                    }
-                },
-                code: node.text
+            // Rule 1: Super calls - super.FUNC($$$)
+            await this.processCallType(node, edges, {
+                ruleId: "super_call",
+                pattern: "super.$FUNC($$$)",
+                callType: CallType.Super
             });
 
-            for (const call of superCalls) {
-                const funcName = call.metaVariables?.single?.FUNC?.text;
-                if (!funcName) continue;
-
-                const calleeId = this.resolveCall(CallType.Super, funcName, undefined, node);
-                if (calleeId) {
-                    edges.push({ from: node.id, to: calleeId });
-                }
-            }
-
-            // Rule 2: Process member calls - RECV.FUNC($$$)
-            const memberCalls = await astGrep({
-                rule: {
-                    id: "member_call",
-                    language: "Solidity",
-                    rule: {
-                        kind: "call_expression",
-                        pattern: {
-                            context: "function f() { $RECV.$FUNC($$$); }",
-                            selector: "call_expression"
-                        }
-                    }
-                },
-                code: node.text
+            // Rule 2: Member calls - RECV.FUNC($$$)
+            await this.processCallType(node, edges, {
+                ruleId: "member_call",
+                pattern: "$RECV.$FUNC($$$)",
+                callType: CallType.Member,
+                extractMember: true
             });
 
-            for (const call of memberCalls) {
-                const funcName = call.metaVariables?.single?.FUNC?.text;
-                const memberName = call.metaVariables?.single?.RECV?.text;
-                if (!funcName || !memberName) continue;
-
-                // Skip if it's a super call (already processed)
-                if (memberName === 'super') continue;
-
-                // Skip built-in functions
-                if (['require', 'assert', 'revert', 'emit'].includes(funcName)) continue;
-
-                const calleeId = this.resolveCall(CallType.Member, funcName, memberName, node);
-                if (calleeId) {
-                    edges.push({ from: node.id, to: calleeId });
-                }
-            }
-
-            // Rule 3: Process this.func() calls - this.$FUNC($$$)
-            const thisCalls = await astGrep({
-                rule: {
-                    id: "this_call",
-                    language: "Solidity",
-                    rule: {
-                        kind: "call_expression",
-                        pattern: {
-                            context: "function f() { this.$FUNC($$$); }",
-                            selector: "call_expression"
-                        }
-                    }
-                },
-                code: node.text
+            // Rule 3: This calls - this.FUNC($$$)
+            await this.processCallType(node, edges, {
+                ruleId: "this_call",
+                pattern: "this.$FUNC($$$)",
+                callType: CallType.This
             });
 
-            for (const call of thisCalls) {
-                const funcName = call.metaVariables?.single?.FUNC?.text;
-                if (!funcName) continue;
-
-                const calleeId = this.resolveCall(CallType.This, funcName, undefined, node);
-                if (calleeId) {
-                    edges.push({ from: node.id, to: calleeId });
-                }
-            }
-
-            // Rule 4: Process simple calls - FUNC($$$)
-            const simpleCalls = await astGrep({
-                rule: {
-                    id: "simple_call",
-                    language: "Solidity",
-                    rule: {
-                        kind: "call_expression",
-                        pattern: {
-                            context: "function f() { $FUNC($$$); }",
-                            selector: "call_expression"
-                        }
-                    }
-                },
-                code: node.text
+            // Rule 4: Simple calls - FUNC($$$)
+            await this.processCallType(node, edges, {
+                ruleId: "simple_call",
+                pattern: "$FUNC($$$)",
+                callType: CallType.Simple
             });
 
-            for (const call of simpleCalls) {
-                let callName = call.metaVariables?.single?.FUNC?.text;
-                if (!callName) continue;
+            // Rule 5: Assembly calls
+            await this.processAssemblyCalls(node, edges);
+        }
+    }
 
-                // Skip if it contains a dot (it's a member call, already processed)
-                if (callName.includes('.')) continue;
+    private async processCallType(
+        node: ExtendedGraphNode,
+        edges: GraphEdge[],
+        config: {
+            ruleId: string;
+            pattern: string;
+            callType: CallType;
+            extractMember?: boolean;
+        }
+    ) {
+        // Wrap code in a contract to ensure valid parsing for all function types (including fallback/receive)
+        const codeToSearch = `contract C { ${node.text} }`;
 
-                // Skip built-in functions
-                if (['require', 'assert', 'revert', 'emit'].includes(callName)) continue;
-
-                const calleeId = this.resolveCall(CallType.Simple, callName, undefined, node);
-                if (calleeId) {
-                    edges.push({ from: node.id, to: calleeId });
-                }
-            }
-
-            // Rule 5: Process assembly calls - yul_function_call
-            const assemblyCalls = await astGrep({
+        const calls = await astGrep({
+            rule: {
+                id: config.ruleId,
+                language: "Solidity",
                 rule: {
-                    id: "assembly_call",
-                    language: "Solidity",
-                    rule: {
-                        kind: "yul_function_call"
+                    kind: "call_expression",
+                    pattern: {
+                        context: `function f() { ${config.pattern}; }`,
+                        selector: "call_expression"
                     }
-                },
-                code: node.text
-            });
-
-            for (const call of assemblyCalls) {
-                const text = call.text;
-                const parenIndex = text.indexOf('(');
-                if (parenIndex === -1) continue;
-
-                const callName = text.substring(0, parenIndex).trim();
-                const calleeId = this.resolveCall(CallType.Simple, callName, undefined, node);
-                if (calleeId) {
-                    edges.push({ from: node.id, to: calleeId });
                 }
+            },
+            code: codeToSearch
+        });
+
+        for (const call of calls) {
+            const funcName = call.metaVariables?.single?.FUNC?.text;
+            if (!funcName) continue;
+
+            const memberName = config.extractMember
+                ? call.metaVariables?.single?.RECV?.text
+                : undefined;
+
+            if (this.shouldSkipCall(funcName, memberName, config.callType)) continue;
+
+            const calleeId = this.resolveCall(config.callType, funcName, memberName, node);
+            if (calleeId) {
+                edges.push({ from: node.id, to: calleeId });
             }
         }
     }
 
-    private resolveCall(type: CallType, name: string, memberName: string | undefined, caller: ExtendedGraphNode): string | undefined {
-        // 1. Handle Super Calls
-        if (type === CallType.Super) {
-            if (!caller.contract) return undefined;
-            const parents = this.inheritanceGraph.get(caller.contract);
-            if (!parents || parents.length === 0) return undefined;
+    private async processAssemblyCalls(node: ExtendedGraphNode, edges: GraphEdge[]) {
+        // Wrap code in a contract to ensure valid parsing
+        const codeToSearch = `contract C { ${node.text} }`;
 
-            for (const parent of parents) {
-                const parentFunc = Array.from(this.symbolTable.values()).find(n =>
-                    n.contract === parent && n.label === name
-                );
-                if (parentFunc) return parentFunc.id;
+        const assemblyCalls = await astGrep({
+            rule: {
+                id: "assembly_call",
+                language: "Solidity",
+                rule: { kind: "yul_function_call" }
+            },
+            code: codeToSearch
+        });
+
+        for (const call of assemblyCalls) {
+            const text = call.text;
+            const parenIndex = text.indexOf('(');
+            if (parenIndex === -1) continue;
+
+            const callName = text.substring(0, parenIndex).trim();
+            const calleeId = this.resolveCall(CallType.Simple, callName, undefined, node);
+            if (calleeId) {
+                edges.push({ from: node.id, to: calleeId });
             }
-            return undefined;
         }
+    }
 
-        // 2. Handle Member Calls (e.g., other.func())
-        if (type === CallType.Member && memberName) {
-            // Try to find a contract/library/interface with the given name
-            const targetFunc = Array.from(this.symbolTable.values()).find(n =>
-                n.contract === memberName && n.label === name
-            );
-            if (targetFunc) return targetFunc.id;
+    private shouldSkipCall(funcName: string, memberName: string | undefined, callType: CallType): boolean {
+        if (SolidityAdapter.BUILTIN_FUNCTIONS.has(funcName)) return true;
+        if (callType === CallType.Member && memberName === 'super') return true;
+        if (callType === CallType.Simple && funcName.includes('.')) return true;
+        return false;
+    }
 
-            // Check using-for libraries
-            if (caller.contract) {
-                const libraries = this.usingForMap.get(caller.contract);
-                if (libraries) {
-                    for (const lib of libraries) {
-                        const libFunc = Array.from(this.symbolTable.values()).find(n =>
-                            n.contract === lib && n.label === name
-                        );
-                        if (libFunc) return libFunc.id;
-                    }
+    private resolveCall(type: CallType, name: string, memberName: string | undefined, caller: ExtendedGraphNode): string | undefined {
+        switch (type) {
+            case CallType.Super:
+                return this.resolveSuperCall(name, caller);
+            case CallType.Member:
+                return this.resolveMemberCall(name, memberName!, caller);
+            case CallType.This:
+            case CallType.Simple:
+                return this.resolveLocalOrInheritedCall(name, caller);
+        }
+        return undefined;
+    }
+
+    private resolveSuperCall(name: string, caller: ExtendedGraphNode): string | undefined {
+        if (!caller.contract) return undefined;
+        const parents = this.inheritanceGraph.get(caller.contract);
+        if (!parents?.length) return undefined;
+
+        for (const parent of parents) {
+            const func = this.findInContract(parent, name);
+            if (func) return func.id;
+        }
+        return undefined;
+    }
+
+    private resolveMemberCall(name: string, memberName: string, caller: ExtendedGraphNode): string | undefined {
+        // Try direct contract/interface reference
+        const func = this.findInContract(memberName, name);
+        if (func) return func.id;
+
+        // Try using-for libraries
+        if (caller.contract) {
+            const libraries = this.usingForMap.get(caller.contract);
+            if (libraries) {
+                for (const lib of libraries) {
+                    const libFunc = this.findInContract(lib, name);
+                    if (libFunc) return libFunc.id;
                 }
             }
-            return undefined;
         }
+        return undefined;
+    }
 
-        // 3. Handle This Calls (this.func())
-        if (type === CallType.This) {
-            if (!caller.contract) return undefined;
-            // Resolve to external/public function in the same contract or parents
-            // For now, reuse simple resolution logic but restricted to current contract hierarchy
-            // Actually, this.func() is an external call, but for the graph we just want to link to the definition.
-            // We can treat it similar to a simple call but skip the local check if we wanted to be strict about visibility,
-            // but for now let's just find the function.
-        }
-
-        // 4. Handle Simple Calls (func()) and This Calls
+    private resolveLocalOrInheritedCall(name: string, caller: ExtendedGraphNode): string | undefined {
         // Check local contract
         if (caller.contract) {
-            const localCandidate = Array.from(this.symbolTable.values()).find(n =>
-                n.contract === caller.contract && n.label === name
-            );
-            if (localCandidate) return localCandidate.id;
+            const local = this.findInContract(caller.contract, name);
+            if (local) return local.id;
 
-            // Check Inheritance
-            const parents = this.inheritanceGraph.get(caller.contract);
-            if (parents) {
-                for (const parent of parents) {
-                    const parentCandidate = Array.from(this.symbolTable.values()).find(n =>
-                        n.contract === parent && n.label === name
-                    );
-                    if (parentCandidate) return parentCandidate.id;
-                }
-            }
+            // Check inheritance (recursive)
+            const inherited = this.resolveInheritedCall(name, caller.contract);
+            if (inherited) return inherited.id;
         }
 
-        // Check using-for libraries (for simple calls, it might be a library function attached to a type, 
-        // but usually that appears as a member call. However, if it's a direct library call like Lib.func(), 
-        // it would be a member call. If it's just func() it might be a free function or inherited.)
+        // Check free functions
+        const freeFuncs = this.symbolsByLabel.get(name);
+        const free = freeFuncs?.find(n => !n.contract);
+        if (free) return free.id;
 
-        // Check for free functions / global search
-        const globalCandidate = Array.from(this.symbolTable.values()).find(n => n.label === name && !n.contract);
-        if (globalCandidate) return globalCandidate.id;
+        // Fallback: Loose matching (restore original behavior)
+        // This is needed for cases where inheritance resolution fails or for complex chains
+        const any = this.symbolsByLabel.get(name)?.[0];
+        return any?.id;
+    }
 
-        // Fallback: Check any function with that name (loose matching)
-        const anyCandidate = Array.from(this.symbolTable.values()).find(n => n.label === name);
-        if (anyCandidate) return anyCandidate.id;
+    private resolveInheritedCall(name: string, contract: string, visited: Set<string> = new Set()): ExtendedGraphNode | undefined {
+        if (visited.has(contract)) return undefined;
+        visited.add(contract);
 
+        const parents = this.inheritanceGraph.get(contract);
+        if (!parents) return undefined;
+
+        for (const parent of parents) {
+            const func = this.findInContract(parent, name);
+            if (func) return func;
+
+            const inherited = this.resolveInheritedCall(name, parent, visited);
+            if (inherited) return inherited;
+        }
         return undefined;
     }
 
     private async buildSymbolTable(files: FileContent[]) {
         const contractRule = {
-            id: "contract_declaration",
+            id: "contract",
             language: "Solidity",
             rule: {
                 kind: "contract_declaration",
@@ -303,9 +339,8 @@ export class SolidityAdapter implements LanguageAdapter {
                 ]
             }
         };
-
         const interfaceRule = {
-            id: "interface_declaration",
+            id: "interface",
             language: "Solidity",
             rule: {
                 kind: "interface_declaration",
@@ -315,19 +350,17 @@ export class SolidityAdapter implements LanguageAdapter {
                 ]
             }
         };
-
         const libraryRule = {
-            id: "library_declaration",
+            id: "library",
             language: "Solidity",
             rule: {
                 kind: "library_declaration",
-                pattern: "library $NAME { $$$ }"
+                any: [{ pattern: "library $NAME { $$$ }" }]
             }
         };
 
-        // Separate rules for regular functions and fallback/receive
         const regularFunctionRule = {
-            id: "regular_function",
+            id: "function",
             language: "Solidity",
             rule: {
                 kind: "function_definition",
@@ -341,46 +374,44 @@ export class SolidityAdapter implements LanguageAdapter {
         const fallbackReceiveRule = {
             id: "fallback_receive",
             language: "Solidity",
-            rule: {
-                kind: "fallback_receive_definition"
-            }
+            rule: { kind: "fallback_receive_definition" }
         };
 
-        // Track using-for directives
         const usingRule = {
-            id: "using_directive",
+            id: "using",
+            language: "Solidity",
+            rule: { kind: "using_directive", pattern: "using $LIB for $TYPE;" }
+        };
+
+        const freeFunctionRule = {
+            id: "free_function",
             language: "Solidity",
             rule: {
-                kind: "using_directive",
-                pattern: "using $LIB for $TYPE;"
+                kind: "function_definition",
+                not: { inside: { kind: "contract_body" } },
+                any: [
+                    { pattern: "function $NAME($$$PARAMS) $$$MODIFIERS { $$$ }" },
+                    { pattern: "function $NAME($$$PARAMS) $$$MODIFIERS;" }
+                ]
             }
         };
 
         for (const file of files) {
             // 1. Find Contracts/Interfaces/Libraries
-            const contracts = await astGrep({
-                rule: contractRule,
-                code: file.content
-            });
-            const interfaces = await astGrep({
-                rule: interfaceRule,
-                code: file.content
-            });
-            const libraries = await astGrep({
-                rule: libraryRule,
-                code: file.content
-            });
+            const contracts = [
+                ...(await astGrep({ rule: contractRule, code: file.content })),
+                ...(await astGrep({ rule: interfaceRule, code: file.content })),
+                ...(await astGrep({ rule: libraryRule, code: file.content }))
+            ];
 
-            const allContracts = [...contracts, ...interfaces, ...libraries];
-
-            // 2. Process each contract and its functions
-            for (const contract of allContracts) {
+            // 2. Process each contract
+            for (const contract of contracts) {
                 const contractName = contract.metaVariables?.single?.NAME?.text;
                 if (!contractName) continue;
 
                 // Handle Inheritance
-                const parentsText: string[] = contract.metaVariables?.multi?.PARENTS
-                    ?.map((p: { text: string }) => p.text)
+                const parentsText = contract.metaVariables?.multi?.PARENTS
+                    ?.map((p: any) => p.text)
                     .filter((t: string) => t !== ',')
                     .map((t: string) => t.trim()) || [];
 
@@ -388,157 +419,64 @@ export class SolidityAdapter implements LanguageAdapter {
                     this.inheritanceGraph.set(contractName, parentsText);
                 }
 
-                // Track using-for directives
-                const usingDirectives = await astGrep({
-                    rule: usingRule,
-                    code: contract.text
-                });
-
-                const libs: string[] = [];
-                for (const directive of usingDirectives) {
-                    const libName = directive.metaVariables?.single?.LIB?.text;
-                    if (libName) {
-                        libs.push(libName);
-                    }
-                }
+                // Track using-for
+                const usingDirectives = await astGrep({ rule: usingRule, code: contract.text });
+                const libs = usingDirectives
+                    .map(d => d.metaVariables?.single?.LIB?.text)
+                    .filter((t): t is string => !!t);
 
                 if (libs.length > 0) {
                     this.usingForMap.set(contractName, libs);
                 }
 
-                // Find functions within this contract (optimization: search contract.text instead of file.content)
-                const contractFunctions = await astGrep({
-                    rule: regularFunctionRule,
-                    code: contract.text
-                });
+                // Find functions
+                const functions = await astGrep({ rule: regularFunctionRule, code: contract.text });
+                const fallbackReceives = await astGrep({ rule: fallbackReceiveRule, code: contract.text });
 
-                const contractFallbackReceive = await astGrep({
-                    rule: fallbackReceiveRule,
-                    code: contract.text
-                });
-
-                // Process regular functions
-                for (const fn of contractFunctions) {
-                    const fnName = fn.metaVariables?.single?.NAME?.text;
-                    if (!fnName) continue;
-
-                    // Extract visibility
-                    const modifiers: string[] = fn.metaVariables?.multi?.MODIFIERS
-                        ?.map((m: { text: string }) => m.text) ?? [];
-                    const visibility = modifiers.find(
-                        (m): m is 'external' | 'public' | 'internal' | 'private' =>
-                            m === 'external' || m === 'public' || m === 'internal' || m === 'private'
-                    );
-
-                    // Build ID
-                    const params = fn.metaVariables?.multi?.PARAMS?.map((p: { text: string }) => p.text).join('') || '';
-                    const signature = `${fnName}(${params})`;
-                    const id = `${contractName}.${signature}`;
-
-                    const node: ExtendedGraphNode = {
-                        id,
-                        label: fnName,
-                        file: file.path,
-                        contract: contractName,
-                        visibility,
-                        range: {
-                            start: { line: contract.range.start.line + fn.range.start.line + 1, column: fn.range.start.column },
-                            end: { line: contract.range.start.line + fn.range.end.line + 1, column: fn.range.end.column }
-                        },
-                        text: fn.text
-                    };
-
-                    this.symbolTable.set(id, node);
+                for (const fn of functions) {
+                    this.indexSymbol(this.createFunctionNode(fn, file.path, contractName, contract.range.start.line));
                 }
 
-                // Process fallback/receive functions
-                for (const fn of contractFallbackReceive) {
-                    // Determine if it's fallback or receive by checking the text
+                for (const fn of fallbackReceives) {
                     const text = fn.text.trim();
-                    let fnName: string;
-                    if (text.includes('fallback')) {
-                        fnName = 'fallback';
-                    } else if (text.includes('receive')) {
-                        fnName = 'receive';
-                    } else {
-                        continue;
-                    }
-
-                    const signature = `${fnName}()`;
-                    const id = `${contractName}.${signature}`;
-
-                    const node: ExtendedGraphNode = {
-                        id,
-                        label: fnName,
-                        file: file.path,
-                        contract: contractName,
-                        visibility: 'external', // fallback/receive are always external
-                        range: {
-                            start: { line: contract.range.start.line + fn.range.start.line + 1, column: fn.range.start.column },
-                            end: { line: contract.range.start.line + fn.range.end.line + 1, column: fn.range.end.column }
-                        },
-                        text: fn.text
-                    };
-
-                    this.symbolTable.set(id, node);
+                    const name = text.includes('receive') ? 'receive' : 'fallback';
+                    // Mock a match object for the helper
+                    const mockFn = { ...fn, metaVariables: { single: { NAME: { text: name } }, multi: { PARAMS: [], MODIFIERS: [{ text: 'external' }] } } };
+                    this.indexSymbol(this.createFunctionNode(mockFn, file.path, contractName, contract.range.start.line));
                 }
             }
 
-            // 3. Find free functions (functions not inside any contract/interface/library)
-            const freeFunctionRule = {
-                id: "free_function",
-                language: "Solidity",
-                rule: {
-                    kind: "function_definition",
-                    not: {
-                        inside: {
-                            kind: "contract_body"
-                        }
-                    },
-                    any: [
-                        { pattern: "function $NAME($$$PARAMS) $$$MODIFIERS { $$$ }" },
-                        { pattern: "function $NAME($$$PARAMS) $$$MODIFIERS;" }
-                    ]
-                }
-            };
-
-            const freeFunctions = await astGrep({
-                rule: freeFunctionRule,
-                code: file.content
-            });
-
+            // 3. Find free functions
+            const freeFunctions = await astGrep({ rule: freeFunctionRule, code: file.content });
             for (const fn of freeFunctions) {
-                const fnName = fn.metaVariables?.single?.NAME?.text;
-                if (!fnName) continue;
-
-                // Extract visibility
-                const modifiers: string[] = fn.metaVariables?.multi?.MODIFIERS
-                    ?.map((m: { text: string }) => m.text) ?? [];
-                const visibility = modifiers.find(
-                    (m): m is 'external' | 'public' | 'internal' | 'private' =>
-                        m === 'external' || m === 'public' || m === 'internal' || m === 'private'
-                );
-
-                // Build ID
-                const params = fn.metaVariables?.multi?.PARAMS?.map((p: { text: string }) => p.text).join('') || '';
-                const signature = `${fnName}(${params})`;
-                const id = signature; // Free functions don't have a contract prefix
-
-                const node: ExtendedGraphNode = {
-                    id,
-                    label: fnName,
-                    file: file.path,
-                    contract: undefined,
-                    visibility,
-                    range: {
-                        start: { line: fn.range.start.line + 1, column: fn.range.start.column },
-                        end: { line: fn.range.end.line + 1, column: fn.range.end.column }
-                    },
-                    text: fn.text
-                };
-
-                this.symbolTable.set(id, node);
+                this.indexSymbol(this.createFunctionNode(fn, file.path));
             }
         }
+    }
+
+    private createFunctionNode(fn: any, file: string, contract?: string, baseLineOffset: number = 0): ExtendedGraphNode {
+        const fnName = fn.metaVariables?.single?.NAME?.text!;
+        const modifiers: string[] = fn.metaVariables?.multi?.MODIFIERS?.map((m: { text: string }) => m.text) ?? [];
+        const visibility = modifiers.find(
+            (m): m is 'external' | 'public' | 'internal' | 'private' =>
+                ['external', 'public', 'internal', 'private'].includes(m)
+        );
+
+        const params = fn.metaVariables?.multi?.PARAMS?.map((p: { text: string }) => p.text).join('') || '';
+        const signature = `${fnName}(${params})`;
+        const id = contract ? `${contract}.${signature}` : signature;
+
+        return {
+            id,
+            label: fnName,
+            file,
+            contract,
+            visibility,
+            range: {
+                start: { line: baseLineOffset + fn.range.start.line + 1, column: fn.range.start.column },
+                end: { line: baseLineOffset + fn.range.end.line + 1, column: fn.range.end.column }
+            },
+            text: fn.text
+        };
     }
 }

@@ -1,0 +1,26 @@
+description = "Stage 4: Report - Generate the final audit estimation report."
+
+prompt = """
+You are an expert software auditor.
+
+Task: Generate a comprehensive "Audit Estimation Report".
+
+1.  **Summarize**:
+    *   Provide a high-level summary of the repository and the identified chunks.
+    *   List the final scope (files included).
+
+2.  **Detailed Scope Table**:
+    *   Create a table listing all in-scope files.
+    *   Columns: File Path, Category, NLoC, Complexity, Estimated Hours.
+
+3.  **Totals**:
+    *   Total NLoC.
+    *   Total Estimated Hours.
+    *   Total Estimated Days.
+
+4.  **Recommendations & Timeline**:
+    *   Propose a rough timeline or order of execution (e.g., "Start with Core Logic, then move to Periphery").
+    *   Highlight any specific concerns or risks identified during the exploration.
+
+Output Format: Markdown.
+"""

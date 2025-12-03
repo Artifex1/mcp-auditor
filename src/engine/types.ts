@@ -1,5 +1,9 @@
 export enum SupportedLanguage {
     Solidity = "solidity",
+    Cpp = "cpp",
+    Java = "java",
+    Go = "go",
+    Rust = "rust",
     // Future languages:
     // TypeScript = "typescript",
     // JavaScript = "javascript",
@@ -17,9 +21,7 @@ export interface Entrypoint {
     };
 }
 
-export interface FunctionInsights {
-    // TODO: Define structure
-}
+
 
 export interface FileContent {
     path: string;
@@ -43,4 +45,13 @@ export interface GraphEdge {
 export interface CallGraph {
     nodes: GraphNode[];
     edges: GraphEdge[];
+}
+
+export interface FileMetrics {
+    file: string;
+    nloc: number;
+    linesWithComments: number;
+    commentDensity: number;
+    cognitiveComplexity: number;
+    estimatedHours: number;
 }
