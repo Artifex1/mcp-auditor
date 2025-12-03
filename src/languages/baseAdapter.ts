@@ -10,11 +10,13 @@ export interface AdapterConfig {
         normalization?: any[]; // Optional: Rules for multi-line constructs to normalize
     };
     constants: {
-        baseRateNlocPerDay: number;
-        complexityPenaltyThreshold: number;
-        complexityPenaltyFactor: number;
-        commentDensityBenefitThreshold: number;
-        commentDensityBenefitFactor: number;
+        baseRateNlocPerDay: number; // How many NLoC a reviewer covers in one day (8h baseline)
+        complexityMidpoint: number; // Normalized CC (per 100 NLoC) where complexity impact is neutral
+        complexitySteepness: number; // How quickly complexity ramps toward its caps
+        complexityBenefitCap: number; // Max factor reduction from low complexity (e.g., 0.25 => -25%)
+        complexityPenaltyCap: number; // Max factor increase from high complexity (e.g., 0.50 => +50%)
+        commentFullBenefitDensity: number; // Comment density (%) where documentation benefit is near its cap
+        commentBenefitCap: number; // Max factor reduction from strong documentation (e.g., 0.30 => -30%)
     };
 }
 
@@ -75,12 +77,13 @@ export abstract class BaseAdapter implements LanguageAdapter {
         const results: FileMetrics[] = [];
         const {
             baseRateNlocPerDay,
-            complexityPenaltyThreshold,
-            complexityPenaltyFactor,
-            commentDensityBenefitThreshold,
-            commentDensityBenefitFactor
+            complexityMidpoint,
+            complexitySteepness,
+            complexityBenefitCap,
+            complexityPenaltyCap,
+            commentFullBenefitDensity,
+            commentBenefitCap
         } = this.config.constants;
-        const HOURS_PER_DAY = 8;
 
         for (const file of files) {
             const lines = file.content.split('\n');
@@ -207,14 +210,24 @@ export abstract class BaseAdapter implements LanguageAdapter {
             const normalizedCC = nloc > 0 ? (cc / nloc) * 100 : 0;
 
             // 4. Estimation
-            let factor = 1.0;
-            const ccFactor = Math.tanh(Math.max(0, normalizedCC - complexityPenaltyThreshold) / 10);
-            factor += ccFactor * complexityPenaltyFactor;
-            const cdFactor = 1 / (1 + Math.exp(-(commentDensity - commentDensityBenefitThreshold) / 10));
-            factor -= cdFactor * commentDensityBenefitFactor;
-            factor = Math.max(0.5, factor);
+            const baseHours = (nloc / baseRateNlocPerDay) * 8;
 
-            const estimatedHours = parseFloat((((nloc / baseRateNlocPerDay) * HOURS_PER_DAY) * factor).toFixed(2));
+            // Complexity effect: centered around midpoint, capped by separate benefit/penalty caps
+            const ccDelta = normalizedCC - complexityMidpoint;
+            const ccShape = Math.tanh(ccDelta / complexitySteepness); // ~[-1, 1]
+            const ccAdjustment = ccShape >= 0
+                ? ccShape * complexityPenaltyCap
+                : ccShape * complexityBenefitCap;
+
+            // Comment effect: smooth ramp up to full benefit density (tanh-based, 0 benefit at 0%)
+            const cdProgress = Math.max(0, commentDensity) / Math.max(1, commentFullBenefitDensity); // 0..>
+            const cdShape = Math.tanh(cdProgress * 2.646); // ~0 at 0%, ~0.99 at fullBenefitDensity
+            const cdAdjustment = cdShape * commentBenefitCap;
+
+            let factor = 1.0 + ccAdjustment - cdAdjustment;
+            factor = Math.max(0.5, Math.min(1 + complexityPenaltyCap, factor));
+
+            const estimatedHours = parseFloat((baseHours * factor).toFixed(2));
 
             results.push({
                 file: file.path,

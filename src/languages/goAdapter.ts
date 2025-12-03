@@ -39,11 +39,22 @@ export class GoAdapter extends BaseAdapter {
                 ]
             },
             constants: {
-                baseRateNlocPerDay: 300,
-                complexityPenaltyThreshold: 10,
-                complexityPenaltyFactor: 0.5,
-                commentDensityBenefitThreshold: 20,
-                commentDensityBenefitFactor: 0.3
+                baseRateNlocPerDay: 400,
+                // Go is intentionally simple; deep nesting and clever control flow
+                // are atypical. We start penalizing at a lower CC density than C++.
+                complexityMidpoint: 12,
+                // A bit sharper than C++: once Go code gets significantly more complex
+                // than “normal,” review cost ramps up fairly quickly.
+                complexitySteepness: 9,
+                // Very simple Go can give ~25% speedup, while heavily tangled logic
+                // can cost up to ~50% more time. Extreme complexity is less common
+                // than in low-level systems languages.
+                complexityBenefitCap: 0.25,
+                complexityPenaltyCap: 0.50,
+                // Idiomatic Go favors clear code with modest comments. Around 15%+
+                // starts unlocking the bulk of the documentation benefit (up to ~25%).
+                commentFullBenefitDensity: 15,
+                commentBenefitCap: 0.25
             }
         });
     }

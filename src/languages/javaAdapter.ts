@@ -35,11 +35,21 @@ export class JavaAdapter extends BaseAdapter {
                 ]
             },
             constants: {
-                baseRateNlocPerDay: 250,
-                complexityPenaltyThreshold: 10,
-                complexityPenaltyFactor: 0.5,
-                commentDensityBenefitThreshold: 20,
-                commentDensityBenefitFactor: 0.3
+                baseRateNlocPerDay: 400,
+                //  Java tends to be verbose but structurally simpler than C++/Rust.
+                //  We expect slightly lower CC density before considering it “complex.”
+                complexityMidpoint: 13,
+                //  Once Java control flow gets significantly more tangled than normal
+                //  business logic, we ramp penalties a bit faster.
+                complexitySteepness: 9,
+                //  Deep OO / branching can add up to ~55% extra review time, while
+                //  simple Java can give ~25% speedup at best.
+                complexityBenefitCap: 0.25,
+                complexityPenaltyCap: 0.55,
+                //  Many Java codebases rely on readable code plus moderate Javadoc.
+                //  Around 25% comments unlocks most of the doc benefit (up to ~25%).
+                commentFullBenefitDensity: 25,
+                commentBenefitCap: 0.25
             }
         });
     }
