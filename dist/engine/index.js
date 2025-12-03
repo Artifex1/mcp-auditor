@@ -65,12 +65,12 @@ export class Engine {
         const filePaths = await resolveFiles(patterns);
         const files = await readFiles(filePaths);
         const filesByLanguage = this.groupFilesByLanguage(files);
-        const allSignatures = [];
+        const allSignatures = {};
         for (const [lang, langFiles] of filesByLanguage.entries()) {
             const adapter = this.getAdapter(lang);
             if (adapter) {
                 const signatures = await adapter.extractSignatures(langFiles);
-                allSignatures.push(...signatures);
+                Object.assign(allSignatures, signatures);
             }
         }
         return allSignatures;

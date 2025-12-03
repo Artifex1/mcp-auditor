@@ -12,7 +12,7 @@ export interface LanguageAdapter {
     languageId: SupportedLanguage;
     extractEntrypoints(files: FileContent[]): Promise<Entrypoint[]>;
     generateCallGraph(files: FileContent[]): Promise<CallGraph>;
-    extractSignatures(files: FileContent[]): Promise<string[]>;
+    extractSignatures(files: FileContent[]): Promise<Record<string, string[]>>;
     calculateMetrics(files: FileContent[]): Promise<FileMetrics[]>;
 }
 
@@ -80,17 +80,17 @@ export class Engine {
         return allEntrypoints;
     }
 
-    async processSignatures(patterns: string[]): Promise<string[]> {
+    async processSignatures(patterns: string[]): Promise<Record<string, string[]>> {
         const filePaths = await resolveFiles(patterns);
         const files = await readFiles(filePaths);
         const filesByLanguage = this.groupFilesByLanguage(files);
-        const allSignatures: string[] = [];
+        const allSignatures: Record<string, string[]> = {};
 
         for (const [lang, langFiles] of filesByLanguage.entries()) {
             const adapter = this.getAdapter(lang);
             if (adapter) {
                 const signatures = await adapter.extractSignatures(langFiles);
-                allSignatures.push(...signatures);
+                Object.assign(allSignatures, signatures);
             }
         }
         return allSignatures;

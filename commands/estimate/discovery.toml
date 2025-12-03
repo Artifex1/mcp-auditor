@@ -5,17 +5,17 @@ You are a senior Security Auditor.
 
 Task: Discover the scope of the audit and organize files into logical chunks.
 
-The user might specify a directory or file path for discovery, or use a scope text file with a list of paths: {{ args }}
+The user might specify a directory, file path, or scope text file: {{ args }}
 
-1. **Identify initial scope**: Check whether user specified a directory or file path.
-    - If it exists, read it to understand the intended scope.
-    - If it does NOT exist, run a `tree`-like command to get an overview of the file structure.
+1. **Get file structure**: Immediately check the scope.
+    - If user provided a path to a scope file, read it.
+    - Otherwise, run a `tree`-like command or `ls -R` to get the file structure.
 
-2. **Analyze and Chunk**: Based on the list of files (from `scope.txt` or `tree`), group the files into logical "chunks".
-    - Chunks should be sets of related files (e.g., "Core Logic", "Token Implementation", "Governance", "Utils", "Tests", "Scripts").
+2. **Chunk files**: Group files into logical chunks based on the structure.
+    - Examples: "Core Logic", "Token Implementation", "Governance", "Utils", "Tests", "Scripts"
     - Aim for high cohesion within chunks.
 
-3. **Report**: Present the identified chunks to the user.
-    - List each chunk with a brief description and the list of files (or patterns) included.
-    - Ask the user if this high-level organization looks correct.
+3. **Report**: Present the chunks to the user.
+    - List each chunk with a one-liner description and included files/patterns underneath.
+    - Ask if the organization looks correct.
 """

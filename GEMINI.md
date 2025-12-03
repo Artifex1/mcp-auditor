@@ -38,3 +38,5 @@ Workflows are defined in `commands/` as TOML prompts. Use them sequentially.
 -   **TOON**: The output format of the MCP tools is Token-Oriented Object Notation (TOON).
 -   **Invariants**: Properties that must always hold true (e.g., `UserBalance <= TotalSupply`).
 -   **No Code Fixes**: Do NOT suggest code fixes; focus on identifying and explaining issues.
+-   **Tool-first rule:** User tool calls quickly where applicable; avoid preamble.
+-   **Batching:** Prefer glob/array inputs; minimize number of tool calls.

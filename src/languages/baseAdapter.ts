@@ -35,8 +35,9 @@ export abstract class BaseAdapter implements LanguageAdapter {
         return { nodes: [], edges: [] };
     }
 
-    async extractSignatures(files: FileContent[]): Promise<string[]> {
-        const signatures: string[] = [];
+    async extractSignatures(files: FileContent[]): Promise<Record<string, string[]>> {
+        const signaturesByFile: Record<string, string[]> = {};
+
         for (const file of files) {
             try {
                 const matches = await astGrep({
@@ -45,15 +46,29 @@ export abstract class BaseAdapter implements LanguageAdapter {
                     rule: this.config.rules.functions
                 });
 
+                const signatures: string[] = [];
                 for (const match of matches) {
-                    const firstLine = match.text.split('\n')[0];
-                    signatures.push(`${file.path}:${match.range.start.line + 1}: ${firstLine.trim()}...`);
+                    // Extract signature up to opening brace (handles multi-line signatures)
+                    const braceIndex = match.text.indexOf('{');
+                    const signature = braceIndex !== -1
+                        ? match.text.substring(0, braceIndex).trim()
+                        : match.text.trim();
+
+                    // Truncate to 80 characters max
+                    const truncated = signature.length > 80
+                        ? signature.substring(0, 77) + '...'
+                        : signature;
+                    signatures.push(truncated);
+                }
+
+                if (signatures.length > 0) {
+                    signaturesByFile[file.path] = signatures;
                 }
             } catch (e) {
                 console.error(`Error extracting signatures for ${file.path}:`, e);
             }
         }
-        return signatures;
+        return signaturesByFile;
     }
 
     async calculateMetrics(files: FileContent[]): Promise<FileMetrics[]> {
@@ -188,7 +203,7 @@ export abstract class BaseAdapter implements LanguageAdapter {
             }
 
             const nloc = Math.max(0, totalLines - blankLines - onlyCommentLinesCount - normalizationAdjustment);
-            const commentDensity = nloc > 0 ? (linesWithComments / nloc) * 100 : 0;
+            const commentDensity = nloc > 0 ? parseFloat(((linesWithComments / nloc) * 100).toFixed(2)) : 0;
             const normalizedCC = nloc > 0 ? (cc / nloc) * 100 : 0;
 
             // 4. Estimation
@@ -199,7 +214,7 @@ export abstract class BaseAdapter implements LanguageAdapter {
             factor -= cdFactor * commentDensityBenefitFactor;
             factor = Math.max(0.5, factor);
 
-            const estimatedHours = ((nloc / baseRateNlocPerDay) * HOURS_PER_DAY) * factor;
+            const estimatedHours = parseFloat((((nloc / baseRateNlocPerDay) * HOURS_PER_DAY) * factor).toFixed(2));
 
             results.push({
                 file: file.path,

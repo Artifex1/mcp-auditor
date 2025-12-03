@@ -9,11 +9,11 @@ export const peekSchema = {
 export function createPeekHandler(engine) {
     return async ({ paths }) => {
         try {
-            const signatures = await engine.processSignatures(paths);
+            const signaturesByFile = await engine.processSignatures(paths);
             return {
                 content: [{
                         type: "text",
-                        text: encode({ signatures })
+                        text: encode(signaturesByFile)
                     }]
             };
         }

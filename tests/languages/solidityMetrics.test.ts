@@ -13,10 +13,11 @@ describe('SolidityAdapter Metrics', () => {
             }
         `;
 
-        const signatures = await adapter.extractSignatures([{ path: 'Test.sol', content }]);
-        expect(signatures.length).toBeGreaterThan(0);
-        expect(signatures.some(s => s.includes('foo()'))).toBe(true);
-        expect(signatures.some(s => s.includes('bar'))).toBe(true);
+        const signaturesByFile = await adapter.extractSignatures([{ path: 'Test.sol', content }]);
+        const allSignatures = Object.values(signaturesByFile).flat();
+        expect(allSignatures.length).toBeGreaterThan(0);
+        expect(allSignatures.some(s => s.includes('foo()'))).toBe(true);
+        expect(allSignatures.some(s => s.includes('bar'))).toBe(true);
     });
 
     it('should calculate metrics for Solidity code', async () => {

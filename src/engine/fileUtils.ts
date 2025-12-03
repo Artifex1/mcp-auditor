@@ -12,12 +12,14 @@ export async function resolveFiles(patterns: string[], rootDir: string = process
     return entries;
 }
 
-export async function readFiles(paths: string[]): Promise<FileContent[]> {
+export async function readFiles(paths: string[], rootDir: string = process.cwd()): Promise<FileContent[]> {
     const results: FileContent[] = [];
     for (const p of paths) {
         try {
             const content = await fs.readFile(p, 'utf-8');
-            results.push({ path: p, content });
+            // Convert to relative path for cleaner output
+            const relativePath = path.relative(rootDir, p);
+            results.push({ path: relativePath, content });
         } catch (error) {
             console.error(`Failed to read file ${p}:`, error);
             // We skip files we can't read, or we could throw. 

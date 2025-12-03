@@ -15,11 +15,11 @@ export function createPeekHandler(engine: Engine) {
         { paths }: { paths: string[] }
     ): Promise<CallToolResult> => {
         try {
-            const signatures = await engine.processSignatures(paths);
+            const signaturesByFile = await engine.processSignatures(paths);
             return {
                 content: [{
                     type: "text",
-                    text: encode({ signatures })
+                    text: encode(signaturesByFile)
                 }]
             };
         } catch (error) {

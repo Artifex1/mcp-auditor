@@ -24,7 +24,9 @@ export function createMetricsHandler(engine: Engine) {
                 return acc;
             }, { totalNloc: 0, totalHours: 0 });
 
-            const totalDays = summary.totalHours / 8;
+            // Round to 2 decimal places
+            summary.totalHours = parseFloat(summary.totalHours.toFixed(2));
+            const totalDays = parseFloat((summary.totalHours / 8).toFixed(2));
 
             return {
                 content: [{

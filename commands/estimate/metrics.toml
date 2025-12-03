@@ -5,22 +5,18 @@ You are a senior Security Auditor.
 
 Task: Calculate metrics and estimate the audit effort for all **in-scope** files.
 
-**Tools:**
-- Use the `metrics` tool to calculate complexity and effort estimates.
+**IMPORTANT: Call the `metrics` tool FIRST, then analyze the results.**
 
-The user might specify specific files to include or exclude from the metrics calculation: {{ args }}
+The user might specify specific files: {{ args }}
 
-1. **Input**: With the optional user arguments, specify the list of in-scope file paths as per previous exploration rounds.
+1. **Calculate Metrics**: Immediately call the `metrics` tool with the in-scope file paths from previous exploration.
+    - If user provided specific files in args, use those.
+    - Otherwise, use the in-scope files identified in the explore stage.
 
-2. **Calculate Metrics**: Use the `metrics` tool on these file paths.
+2. **Analyze Results**: Review the output from the `metrics` tool.
     - The tool provides: Normalized Lines of Code (NLoC), Lines with Comments (LwC), Comment Density (CD), Cognitive Complexity (CC), and Estimated Hours (EH).
+    - You may adjust estimates based on qualitative understanding (e.g., particularly tricky or simple files).
+    - Clearly document and justify any adjustments.
 
-3. **Review Estimates**:
-    - Review the automated estimates.
-    - You may adjust them based on your qualitative understanding (e.g., if a file is known to be particularly tricky or simple despite the metrics).
-    - Clearly document any adjustments to the user and justify them.
-
-4. **Report**: Present the detailed metrics and total estimation.
-    - Give a chunk overview with respect to the metrics. Do not repeat the previous description, just point out gained insights on complexity, and a summed up estimation per chunk.
-    - Show the total estimated hours and business days (assuming 8h/day).
+3. **Report**: Present chunk overview highlighting complexity insights.
 """

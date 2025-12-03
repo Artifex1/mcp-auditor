@@ -7,9 +7,8 @@
     "mcp-auditor": {
       "command": "node",
       "args": [
-        "${extensionPath}${/}dist${/}server.js"
-      ],
-      "cwd": "${extensionPath}"
+        "${extensionPath}${/}dist${/}mcp${/}server.js"
+      ]
     }
   }
 }
