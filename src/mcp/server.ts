@@ -10,6 +10,7 @@ import { RustAdapter } from "../languages/rustAdapter.js";
 import { createEntrypointsHandler, entrypointsSchema } from "./tools/entrypoints.js";
 import { createPeekHandler, peekSchema } from "./tools/peek.js";
 import { createMetricsHandler, metricsSchema } from "./tools/metrics.js";
+import { createCallGraphHandler, callGraphSchema } from "./tools/callgraph.js";
 
 // Create and configure engine
 const engine = new Engine();
@@ -41,6 +42,12 @@ server.registerTool(
     "metrics",
     metricsSchema,
     createMetricsHandler(engine)
+);
+
+server.registerTool(
+    "callgraph",
+    callGraphSchema,
+    createCallGraphHandler(engine)
 );
 
 async function main() {

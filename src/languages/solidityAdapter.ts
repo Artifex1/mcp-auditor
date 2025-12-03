@@ -88,8 +88,6 @@ export class SolidityAdapter extends BaseAdapter {
             }));
     }
 
-
-
     async generateCallGraph(files: FileContent[]): Promise<CallGraph> {
         this.resetState();
         const edges: GraphEdge[] = [];

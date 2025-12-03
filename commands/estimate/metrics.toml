@@ -1,23 +1,26 @@
 description = "Stage 3: Metrics - Calculate complexity and estimate effort."
 
 prompt = """
-You are an expert software auditor.
+You are a senior Security Auditor.
 
 Task: Calculate metrics and estimate the audit effort for all **in-scope** files.
 
-1.  **Input**: specific the list of files that have been confirmed as in-scope from the previous stage.
+**Tools:**
+- Use the `metrics` tool to calculate complexity and effort estimates.
 
-2.  **Calculate Metrics**: Run the `metrics` tool on these files.
-    *   The tool provides: NLoC, Lines with Comments, Comment Density, Cognitive Complexity, and Estimated Hours.
+The user might specify specific files to include or exclude from the metrics calculation: {{ args }}
 
-3.  **Review Estimates**:
-    *   Review the automated estimates.
-    *   You may adjust them based on your qualitative understanding (e.g., if a file is known to be particularly tricky or simple despite the metrics).
+1. **Input**: With the optional user arguments, specify the list of in-scope file paths as per previous exploration rounds.
 
-4.  **Report**: Present the detailed metrics and total estimation.
-    *   Show a table of files with their metrics.
-    *   Show the total estimated hours and business days (assuming 8h/day).
+2. **Calculate Metrics**: Use the `metrics` tool on these file paths.
+    - The tool provides: Normalized Lines of Code (NLoC), Lines with Comments (LwC), Comment Density (CD), Cognitive Complexity (CC), and Estimated Hours (EH).
 
-Output Format:
-Provide the metrics in a clear, structured format (e.g., a table or a list).
+3. **Review Estimates**:
+    - Review the automated estimates.
+    - You may adjust them based on your qualitative understanding (e.g., if a file is known to be particularly tricky or simple despite the metrics).
+    - Clearly document any adjustments to the user and justify them.
+
+4. **Report**: Present the detailed metrics and total estimation.
+    - Give a chunk overview with respect to the metrics. Do not repeat the previous description, just point out gained insights on complexity, and a summed up estimation per chunk.
+    - Show the total estimated hours and business days (assuming 8h/day).
 """

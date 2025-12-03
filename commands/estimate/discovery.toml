@@ -1,33 +1,21 @@
 description = "Stage 1: Discovery - Identify and chunk files for the audit."
 
 prompt = """
-You are an expert software auditor.
+You are a senior Security Auditor.
 
 Task: Discover the scope of the audit and organize files into logical chunks.
 
-1.  **Check for `scope.txt`**: Look for a file named `scope.txt` in the repository root.
-    *   If it exists, read it to understand the intended scope.
-    *   If it does NOT exist, run the `tree` command to get an overview of the file structure.
+The user might specify a directory or file path for discovery, or use a scope text file with a list of paths: {{ args }}
 
-2.  **Analyze and Chunk**: Based on the list of files (from `scope.txt` or `tree`), group the files into logical "chunks".
-    *   Chunks should be sets of related files (e.g., "Core Logic", "Token Implementation", "Governance", "Utils", "Tests", "Scripts").
-    *   Aim for high cohesion within chunks.
+1. **Identify initial scope**: Check whether user specified a directory or file path.
+    - If it exists, read it to understand the intended scope.
+    - If it does NOT exist, run a `tree`-like command to get an overview of the file structure.
 
-3.  **Report**: Present the identified chunks to the user.
-    *   List each chunk with a brief description and the list of files (or patterns) included.
-    *   Ask the user if this high-level organization looks correct.
+2. **Analyze and Chunk**: Based on the list of files (from `scope.txt` or `tree`), group the files into logical "chunks".
+    - Chunks should be sets of related files (e.g., "Core Logic", "Token Implementation", "Governance", "Utils", "Tests", "Scripts").
+    - Aim for high cohesion within chunks.
 
-Output Format (TOON):
-```toon
-{
-  "chunks": [
-    {
-      "name": "Chunk Name",
-      "description": "Brief description",
-      "files": ["file1.sol", "dir/file2.sol"]
-    }
-  ],
-  "message": "I have identified the following chunks based on..."
-}
-```
+3. **Report**: Present the identified chunks to the user.
+    - List each chunk with a brief description and the list of files (or patterns) included.
+    - Ask the user if this high-level organization looks correct.
 """

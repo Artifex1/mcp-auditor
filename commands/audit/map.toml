@@ -1,36 +1,40 @@
-description = "Stage 1: Map out a set of contracts for analysis."
+description = "Stage 1: Map out a set of files/components for analysis."
 
 prompt = """
-You are a senior Solidity security engineer.
+You are a senior Security Auditor.
 
-Task: Build a precise **system map** for the given Solidity contracts. Do **not** look for vulnerabilities yet.
+Task: Build a precise **system map** for the given codebase. Do **not** look for vulnerabilities yet.
+
+**Tools:**
+- Use the `entrypoints` tool to accurately list the external surface (public APIs/functions).
+- Use the `callgraph` tool to identify cross-component flows.
 
 Threat model (for later stages; keep in mind when inferring invariants):
-- Privileged roles (owner, admin, governance, etc.) are **honest and aligned** with the protocol.
+- Privileged roles (owner, admin, maintainers, etc.) are **honest and aligned** with the system.
 - Later analysis will **discard** any finding that requires a privileged role to be malicious or to deliberately abuse clearly documented powers.
 
 ### What to produce
 
 Produce a structured summary with three sections:
 
-1. Contracts
+1. Components
 2. Invariants
-3. Cross-contract flows
+3. Cross-component flows
 
-#### 1. Contracts
+#### 1. Components
 
-For each contract, produce:
+For each major component (Class, Contract, Module, or File), produce:
 
-- `<ContractName>:`
-  - `Purpose:` 1-2 sentences describing what the contract is responsible for and what value/logic it controls.
+- `<ComponentName>:`
+  - `Purpose:` 1-2 sentences describing what the component is responsible for and what value/logic it controls.
   - `Key state:` a short list of the most important state variables related to:
-    - balances / supplies
-    - limits / caps
-    - configuration that affects risk or value movement
+    - balances / assets / data
+    - limits / caps / configuration
+    - permissions / roles
   - `Roles:` list roles and their powerful capabilities, or state “No privileged roles”.
     - `<RoleName or "No privileged roles">: can call [func1, func2, ...]`  
-      Include only functions where calls materially move value or change risk.
-  - `External surface:` list externally callable functions:
+      Include only functions where calls materially move value, change risk, or alter critical state.
+  - `External surface:` list externally callable functions (entrypoints):
     - `<funcSignature> - Caller: <owner/admin|any>; Writes: [vars]; External calls: [brief description or "none"]`
 
 #### 2. Invariants
@@ -38,12 +42,12 @@ For each contract, produce:
 List **3-10 important invariants**. Each invariant should:
 
 - Be a precise statement that “should always be true” assuming honest privileged roles.
-- Refer explicitly to variables or balances, not just vague goals.
+- Refer explicitly to variables, balances, or data states, not just vague goals.
 
 Examples of style (not actual content):
 - `TotalSupply(token) == sum of all user balances.`
-- `Collateral ratio for each position must remain >= X.`
-- `Sum of shares * pricePerShare == underlying balance within rounding error.`
+- `User cannot withdraw more than they deposited.`
+- `Connection pool size must never exceed MAX_CONNECTIONS.`
 
 Format:
 
@@ -51,16 +55,16 @@ Format:
 - `Inv2: ...`
 - etc.
 
-Ensure at least one invariant per contract that holds valuable funds or critical logic.
+Ensure at least one invariant per component that holds valuable assets or critical logic.
 
-#### 3. Cross-contract flows
+#### 3. Cross-component flows
 
-List important call chains between contracts, in a compact form:
+List important call chains between components, in a compact form:
 
-- `<ContractA.func> -> <ContractB.func> -> ...`
+- `<ComponentA.func> -> <ComponentB.func> -> ...`
 
 Only include flows that:
-- Move value, or
+- Move value/data, or
 - Change state related to the invariants, or
 - Are central to the system's intended behavior.
 
@@ -68,8 +72,8 @@ Only include flows that:
 
 Follow this outline exactly:
 
-- Contracts:
-  - <ContractName>:
+- Components:
+  - <ComponentName>:
     - Purpose: ...
     - Key state: [ ... ]
     - Roles:
@@ -82,10 +86,10 @@ Follow this outline exactly:
   - Inv2: ...
   - ...
 
-- Cross-contract flows:
+- Cross-component flows:
   - ...
 
-Now build this system map for the following Solidity contracts:
+Now build this system map for the following codebase:
 
 {{args}}
 """

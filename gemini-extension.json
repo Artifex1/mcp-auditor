@@ -1,11 +1,13 @@
 {
   "name": "mcp-auditor",
   "version": "1.0.0",
+  "description": "MCP Auditor helps estimate and audit code and write issues",
+  "contextFileName": "GEMINI.md",
   "mcpServers": {
-    "nodeServer": {
+    "mcp-auditor": {
       "command": "node",
       "args": [
-        "${extensionPath}${/}dist${/}example.js"
+        "${extensionPath}${/}dist${/}server.js"
       ],
       "cwd": "${extensionPath}"
     }

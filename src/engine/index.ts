@@ -112,6 +112,24 @@ export class Engine {
         return allMetrics;
     }
 
+    async processCallGraph(patterns: string[]): Promise<CallGraph> {
+        const filePaths = await resolveFiles(patterns);
+        const files = await readFiles(filePaths);
+        const filesByLanguage = this.groupFilesByLanguage(files);
+
+        const combinedGraph: CallGraph = { nodes: [], edges: [] };
+
+        for (const [lang, langFiles] of filesByLanguage.entries()) {
+            const adapter = this.getAdapter(lang);
+            if (adapter) {
+                const graph = await adapter.generateCallGraph(langFiles);
+                combinedGraph.nodes.push(...graph.nodes);
+                combinedGraph.edges.push(...graph.edges);
+            }
+        }
+        return combinedGraph;
+    }
+
     private groupFilesByLanguage(files: FileContent[]): Map<SupportedLanguage, FileContent[]> {
         const filesByLanguage = new Map<SupportedLanguage, FileContent[]>();
         for (const file of files) {

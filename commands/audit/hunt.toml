@@ -1,35 +1,38 @@
 description = "Stage 2: Raise various smells."
 
 prompt = """
-You are a senior Solidity security engineer.
+You are a senior Security Auditor.
 
-Goal: Given the system map and Solidity contracts already present in this conversation, identify **as many meaningful security hotspots (“suspicious spots”) as possible** that merit a deeper vulnerability analysis. In this step you are **not** confirming vulnerabilities; you are generating high-quality hypotheses with **high recall**.
+Goal: Given the system map and codebase already present in this conversation, identify **as many meaningful security hotspots (“suspicious spots”) as possible** that merit a deeper vulnerability analysis. In this step you are **not** confirming vulnerabilities; you are generating high-quality hypotheses with **high recall**.
+
+**Tools:**
+- Use the `entrypoints` tool to ensure you have considered **every** public/external function.
 
 Threat model:
-- Privileged roles (owner, admin, governance, etc.) are **honest and aligned** with the protocol.
-- We care about issues that could be exploited by **unprivileged users or external contracts**, or that arise from honest privileged behavior interacting badly with user input or external state.
+- Privileged roles (owner, admin, maintainers, etc.) are **honest and aligned** with the system.
+- We care about issues that could be exploited by **unprivileged users or external actors**, or that arise from honest privileged behavior interacting badly with user input or external state.
 - Ignore anything that only becomes an issue if a privileged role acts maliciously or blatantly against the documented design.
 
 Context:
-- Earlier in this conversation, you ran /map on these contracts and produced a system map (Contracts, Invariants, Cross-contract flows).
-- The system map and the Solidity contracts are available in the prior messages.
-- At the end you may optionally receive a scope hint (e.g. “focus on ContractX” or “only look at deposit/withdraw”), or it may be empty; use it if present.
+- Earlier in this conversation, you ran /map on this codebase and produced a system map (Components, Invariants, Cross-component flows).
+- The system map and the codebase are available in the prior messages.
+- At the end you may optionally receive a scope hint (e.g. “focus on ComponentX” or “only look at login/auth”), or it may be empty; use it if present.
 
 ### How to scan (be systematic)
 
-Go **contract by contract**, and for each contract:
+Go **component by component**, and for each component:
 
-1. Look at every `public` or `external` function.
+1. Look at every `public` or `external` function/API.
 2. If the function:
-   - writes or depends on **key state** from the system map (balances, supplies, limits, important config), or
-   - moves value (deposits, withdrawals, transfers, mints/burns, etc.), or
-   - makes **external calls** (tokens, oracles, other protocols, low-level `call`/`delegatecall`),
+   - writes or depends on **key state** from the system map (balances, permissions, important config), or
+   - moves value/data (transfers, state updates, etc.), or
+   - makes **external calls** (APIs, DB, other services, low-level calls),
    then treat it as a candidate hotspot.
 3. For each such function, **try** to identify at least one plausible way in which:
-   - a non-privileged caller or external contract could stress or misuse it, or
+   - a non-privileged caller or external actor could stress or misuse it, or
    - an invariant from the system map might be at risk.
 
-You may consider any vulnerability types (reentrancy, access control, accounting, oracle issues, DoS, logic errors, upgradeability problems, etc.), but you are not limited to a fixed list. Think broadly about how value, state, and invariants might go wrong.
+You may consider any vulnerability types (reentrancy, access control, race conditions, injection, logic errors, DoS, etc.), but you are not limited to a fixed list. Think broadly about how value, state, and invariants might go wrong.
 
 ### Recall vs noise
 
@@ -37,7 +40,7 @@ You may consider any vulnerability types (reentrancy, access control, accounting
 - It is acceptable and expected that some suspicious spots will later be dismissed as safe by /attack.
 - Avoid only:
   - Purely stylistic issues,
-  - Pure gas micro-optimizations,
+  - Pure performance micro-optimizations (unless they lead to DoS),
   - Findings that *clearly* require a malicious owner/admin.
 
 **Aim to output at least ~10 suspicious spots for a non-trivial system**, and in general try to produce at least one suspicious spot for each non-trivial external function, unless you have strong reasons to believe it is obviously safe under this threat model.
@@ -47,8 +50,8 @@ You may consider any vulnerability types (reentrancy, access control, accounting
 For each suspicious spot, output:
 
 - `Suspicious spot N:`
-  - `Contracts / Functions:` <list of contracts and function signatures involved>
-  - `Attacker type:` <Unprivileged EOA | External contract | Token | Other non-privileged> (do NOT use owner/admin here)
+  - `Components / Functions:` <list of components and function signatures involved>
+  - `Attacker type:` <Unprivileged User | External Actor | Malicious Service | Other> (do NOT use owner/admin here)
   - `Related invariants or state:` <which invariants or key state variables from the system map might be affected; be as specific as possible>
   - `Why suspicious:` <1-3 sentences describing why this area might hide a real issue; this is a hypothesis, not a confirmed bug>
   - `Priority guess:` <High candidate | Medium candidate | Low candidate>  
@@ -65,7 +68,7 @@ Guidelines:
 List suspicious spots in this structure:
 
 - Suspicious spot 1:
-  - Contracts / Functions: ...
+  - Components / Functions: ...
   - Attacker type: ...
   - Related invariants or state: ...
   - Why suspicious: ...
@@ -78,7 +81,7 @@ If, after **systematically** applying the above procedure, you genuinely find no
 
 `No meaningful security hotspots identified under the given threat model.`
 
-Now, using the system map and contracts available in this conversation, and any optional scope hints provided below (if any), produce the list of suspicious spots:
+Now, using the system map and codebase available in this conversation, and any optional scope hints provided below (if any), produce the list of suspicious spots:
 
 {{args}}
 """
