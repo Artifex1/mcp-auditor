@@ -23,6 +23,8 @@ Workflows are defined in `commands/` as TOML prompts. Use them sequentially.
 3.  **Metrics** (`metrics`): Calculate effort for in-scope files using `metrics`.
 4.  **Report** (`report`): Generate final estimation report.
 
+**Important:** Agents should work primarily from context and **must not** write any intermediate outcomes to files unless explicitly asked to do so.
+
 ### 2. Audit (`/audit/*`)
 1.  **Map** (`map`): Build system map (Components, Invariants, Flows) using `entrypoints` & `callgraph`.
 2.  **Hunt** (`hunt`): Identify suspicious spots (high recall) using `entrypoints`.

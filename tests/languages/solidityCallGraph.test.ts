@@ -21,16 +21,18 @@ describe('SolidityAdapter Call Graph', () => {
         expect(graph.edges).toHaveLength(1);
 
         // Verify nodes
-        const nodeA = graph.nodes.find(n => n.label === 'a');
-        const nodeB = graph.nodes.find(n => n.label === 'b');
+        const nodeA = graph.nodes.find(n => n.id.includes('.a('));
+        const nodeB = graph.nodes.find(n => n.id.includes('.b('));
         expect(nodeA).toBeDefined();
         expect(nodeB).toBeDefined();
-        expect(nodeA?.contract).toBe('Test');
-        expect(nodeB?.contract).toBe('Test');
+        expect(nodeA?.id).toContain('Test.a');
+        expect(nodeB?.id).toContain('Test.b');
 
         // Verify edge
-        expect(graph.edges[0].from).toBe(nodeA?.id);
-        expect(graph.edges[0].to).toBe(nodeB?.id);
+        const edge = graph.edges[0];
+        expect(edge.from).toBe(nodeA?.id);
+        expect(edge.to).toBe(nodeB?.id);
+        expect(edge.kind).toBe('internal');
     });
 
     it('should handle single inheritance', async () => {
@@ -51,17 +53,18 @@ describe('SolidityAdapter Call Graph', () => {
         expect(graph.nodes).toHaveLength(2);
         expect(graph.edges).toHaveLength(1);
 
-        const childFunc = graph.nodes.find(n => n.label === 'childFunc');
-        const parentFunc = graph.nodes.find(n => n.label === 'parentFunc');
+        const childFunc = graph.nodes.find(n => n.id.includes('.childFunc('));
+        const parentFunc = graph.nodes.find(n => n.id.includes('.parentFunc(') && n.id.includes('Parent'));
 
         expect(childFunc).toBeDefined();
         expect(parentFunc).toBeDefined();
-        expect(childFunc?.contract).toBe('Child');
-        expect(parentFunc?.contract).toBe('Parent');
+        expect(childFunc?.id).toContain('Child');
+        expect(parentFunc?.id).toContain('Parent');
 
         // Should resolve inherited call
         const edge = graph.edges.find(e => e.from === childFunc?.id);
         expect(edge?.to).toBe(parentFunc?.id);
+        expect(edge?.kind).toBe('internal');
     });
 
     it('should handle multiple inheritance', async () => {
@@ -87,9 +90,9 @@ describe('SolidityAdapter Call Graph', () => {
         expect(graph.nodes).toHaveLength(3);
         expect(graph.edges).toHaveLength(2);
 
-        const childFunc = graph.nodes.find(n => n.label === 'childFunc');
-        const funcA = graph.nodes.find(n => n.label === 'funcA');
-        const funcB = graph.nodes.find(n => n.label === 'funcB');
+        const childFunc = graph.nodes.find(n => n.id.includes('.childFunc('));
+        const funcA = graph.nodes.find(n => n.id.includes('.funcA(') && n.id.includes('ParentA'));
+        const funcB = graph.nodes.find(n => n.id.includes('.funcB(') && n.id.includes('ParentB'));
 
         expect(childFunc).toBeDefined();
         expect(funcA).toBeDefined();
@@ -100,6 +103,8 @@ describe('SolidityAdapter Call Graph', () => {
         expect(edges).toHaveLength(2);
         expect(edges.map(e => e.to)).toContain(funcA?.id);
         expect(edges.map(e => e.to)).toContain(funcB?.id);
+        expect(edges[0].kind).toBe('internal');
+        expect(edges[1].kind).toBe('internal');
     });
 
     it('should handle interface inheritance', async () => {
@@ -117,11 +122,11 @@ describe('SolidityAdapter Call Graph', () => {
 
         expect(graph.nodes).toHaveLength(2);
 
-        const childFunc = graph.nodes.find(n => n.label === 'childFunc');
-        const parentFunc = graph.nodes.find(n => n.label === 'parentFunc');
+        const childFunc = graph.nodes.find(n => n.id.includes('childFunc'));
+        const parentFunc = graph.nodes.find(n => n.id.includes('parentFunc'));
 
-        expect(childFunc?.contract).toBe('IChild');
-        expect(parentFunc?.contract).toBe('IParent');
+        expect(childFunc?.id).toContain('IChild');
+        expect(parentFunc?.id).toContain('IParent');
     });
 
     it('should handle multiple interface inheritance', async () => {
@@ -143,13 +148,13 @@ describe('SolidityAdapter Call Graph', () => {
 
         expect(graph.nodes).toHaveLength(3);
 
-        const funcA = graph.nodes.find(n => n.label === 'funcA');
-        const funcB = graph.nodes.find(n => n.label === 'funcB');
-        const funcC = graph.nodes.find(n => n.label === 'funcC');
+        const funcA = graph.nodes.find(n => n.id.includes('IA.funcA'));
+        const funcB = graph.nodes.find(n => n.id.includes('IB.funcB'));
+        const funcC = graph.nodes.find(n => n.id.includes('IC.funcC'));
 
-        expect(funcA?.contract).toBe('IA');
-        expect(funcB?.contract).toBe('IB');
-        expect(funcC?.contract).toBe('IC');
+        expect(funcA).toBeDefined();
+        expect(funcB).toBeDefined();
+        expect(funcC).toBeDefined();
     });
 
     it('should handle nested inheritance chains', async () => {
@@ -174,9 +179,9 @@ describe('SolidityAdapter Call Graph', () => {
 
         expect(graph.nodes).toHaveLength(3);
 
-        const childFunc = graph.nodes.find(n => n.label === 'childFunc');
-        const parentFunc = graph.nodes.find(n => n.label === 'parentFunc');
-        const grandFunc = graph.nodes.find(n => n.label === 'grandFunc');
+        const childFunc = graph.nodes.find(n => n.id.includes('.childFunc('));
+        const parentFunc = graph.nodes.find(n => n.id.includes('.parentFunc('));
+        const grandFunc = graph.nodes.find(n => n.id.includes('.grandFunc('));
 
         expect(childFunc).toBeDefined();
         expect(parentFunc).toBeDefined();
@@ -204,8 +209,8 @@ describe('SolidityAdapter Call Graph', () => {
 
         expect(graph.nodes).toHaveLength(2);
 
-        const parentFoo = graph.nodes.find(n => n.label === 'foo' && n.contract === 'Parent');
-        const childFoo = graph.nodes.find(n => n.label === 'foo' && n.contract === 'Child');
+        const parentFoo = graph.nodes.find(n => n.id.includes('Parent.foo'));
+        const childFoo = graph.nodes.find(n => n.id.includes('Child.foo'));
 
         expect(parentFoo).toBeDefined();
         expect(childFoo).toBeDefined();
@@ -213,6 +218,7 @@ describe('SolidityAdapter Call Graph', () => {
         // Should resolve super call to parent
         const edge = graph.edges.find(e => e.from === childFoo?.id);
         expect(edge?.to).toBe(parentFoo?.id);
+        expect(edge?.kind).toBe('internal');
     });
 
     it('should handle library calls', async () => {
@@ -234,11 +240,17 @@ describe('SolidityAdapter Call Graph', () => {
 
         expect(graph.nodes).toHaveLength(2);
 
-        const calculate = graph.nodes.find(n => n.label === 'calculate');
-        const add = graph.nodes.find(n => n.label === 'add');
+        const calculate = graph.nodes.find(n => n.id.includes('Calculator.calculate'));
+        const add = graph.nodes.find(n => n.id.includes('Math.add'));
 
-        expect(calculate?.contract).toBe('Calculator');
-        expect(add?.contract).toBe('Math');
+        expect(calculate).toBeDefined();
+        expect(add).toBeDefined();
+
+        // Library call should be internal (inlined) or external depending on visibility
+        // Math.add is internal -> should be internal edge
+        const edge = graph.edges.find(e => e.from === calculate?.id);
+        expect(edge?.to).toBe(add?.id);
+        expect(edge?.kind).toBe('internal');
     });
 
     it('should handle constructor calls', async () => {
@@ -259,9 +271,15 @@ describe('SolidityAdapter Call Graph', () => {
         const graph = await adapter.generateCallGraph(files);
 
         // Constructors should be included in the graph
-        const parentConstructor = graph.nodes.find(n => n.label === 'constructor' && n.contract === 'Parent');
-        const childConstructor = graph.nodes.find(n => n.label === 'constructor' && n.contract === 'Child');
-        const initialize = graph.nodes.find(n => n.label === 'initialize');
+        // Note: constructor IDs are tricky, likely 'Parent.constructor()' vs 'Child.constructor()' if modeled as functions
+        // But SolidityAdapter typically treats them as function definitions if they match the pattern rules.
+        // Actually, my regex for functions didn't explicitly include 'constructor', but parser might pick it up?
+        // Let's check rule: "function_definition". Constructor is "constructor_definition".
+        // SolidityAdapter rules might capture generic functions.
+        // If the test previously passed, it means we found 'constructor'.
+
+        // Update: I suspect 'initialize' is the main thing here.
+        const initialize = graph.nodes.find(n => n.id.includes('initialize'));
 
         expect(initialize).toBeDefined();
     });
@@ -286,8 +304,8 @@ describe('SolidityAdapter Call Graph', () => {
         const files: FileContent[] = [{ path: '/test.sol', content: code }];
         const graph = await adapter.generateCallGraph(files);
 
-        const restricted = graph.nodes.find(n => n.label === 'restricted');
-        const doSomething = graph.nodes.find(n => n.label === 'doSomething');
+        const restricted = graph.nodes.find(n => n.id.includes('restricted'));
+        const doSomething = graph.nodes.find(n => n.id.includes('doSomething'));
 
         expect(restricted).toBeDefined();
         expect(doSomething).toBeDefined();
@@ -300,21 +318,24 @@ describe('SolidityAdapter Call Graph', () => {
             }
             
             contract Caller {
-                IExternal external;
+                IExternal IExternal;
                 
                 function callExternal() public {
-                    external.externalFunc();
+                    IExternal.externalFunc();
                 }
             }
         `;
         const files: FileContent[] = [{ path: '/test.sol', content: code }];
         const graph = await adapter.generateCallGraph(files);
 
-        const callExternal = graph.nodes.find(n => n.label === 'callExternal');
-        const externalFunc = graph.nodes.find(n => n.label === 'externalFunc');
+        const callExternal = graph.nodes.find(n => n.id.includes('callExternal'));
+        const externalFunc = graph.nodes.find(n => n.id.includes('externalFunc'));
 
         expect(callExternal).toBeDefined();
         expect(externalFunc).toBeDefined();
+
+        const edge = graph.edges.find(e => e.from === callExternal?.id);
+        expect(edge?.kind).toBe('external');
     });
 
     it('should handle abstract contracts with multiple inheritance', async () => {
@@ -340,9 +361,9 @@ describe('SolidityAdapter Call Graph', () => {
         const files: FileContent[] = [{ path: '/test.sol', content: code }];
         const graph = await adapter.generateCallGraph(files);
 
-        const callBoth = graph.nodes.find(n => n.label === 'callBoth');
-        const func1 = graph.nodes.find(n => n.label === 'func1' && n.contract === 'Implementation');
-        const func2 = graph.nodes.find(n => n.label === 'func2' && n.contract === 'Implementation');
+        const callBoth = graph.nodes.find(n => n.id.includes('callBoth'));
+        const func1 = graph.nodes.find(n => n.id.includes('Implementation.func1'));
+        const func2 = graph.nodes.find(n => n.id.includes('Implementation.func2'));
 
         expect(callBoth).toBeDefined();
         expect(func1).toBeDefined();
@@ -377,8 +398,8 @@ describe('SolidityAdapter Call Graph', () => {
         const files: FileContent[] = [{ path: '/test.sol', content: code }];
         const graph = await adapter.generateCallGraph(files);
 
-        const callFoo = graph.nodes.find(n => n.label === 'callFoo');
-        const dFoo = graph.nodes.find(n => n.label === 'foo' && n.contract === 'D');
+        const callFoo = graph.nodes.find(n => n.id.includes('callFoo'));
+        const dFoo = graph.nodes.find(n => n.id.includes('D.foo'));
 
         expect(callFoo).toBeDefined();
         expect(dFoo).toBeDefined();
@@ -409,6 +430,7 @@ describe('SolidityAdapter Call Graph', () => {
         // Should resolve this.b() to b
         const edge = graph.edges.find(e => e.from === nodeA?.id);
         expect(edge?.to).toBe(nodeB?.id);
+        expect(edge?.kind).toBe('external');
     });
 
     it('should handle chained calls', async () => {
@@ -431,9 +453,9 @@ describe('SolidityAdapter Call Graph', () => {
         const files: FileContent[] = [{ path: '/test.sol', content: code }];
         const graph = await adapter.generateCallGraph(files);
 
-        const test = graph.nodes.find(n => n.label === 'test');
-        const getX = graph.nodes.find(n => n.label === 'getX');
-        const foo = graph.nodes.find(n => n.label === 'foo');
+        const test = graph.nodes.find(n => n.id.includes('test'));
+        const getX = graph.nodes.find(n => n.id.includes('getX'));
+        const foo = graph.nodes.find(n => n.id.includes('foo'));
 
         expect(test).toBeDefined();
         expect(getX).toBeDefined();
@@ -464,8 +486,8 @@ describe('SolidityAdapter Call Graph', () => {
         const files: FileContent[] = [{ path: '/test.sol', content: code }];
         const graph = await adapter.generateCallGraph(files);
 
-        const callFirst = graph.nodes.find(n => n.label === 'callFirst');
-        const execute = graph.nodes.find(n => n.label === 'execute');
+        const callFirst = graph.nodes.find(n => n.id.includes('callFirst'));
+        const execute = graph.nodes.find(n => n.id.includes('execute'));
 
         expect(callFirst).toBeDefined();
         expect(execute).toBeDefined();
@@ -473,8 +495,7 @@ describe('SolidityAdapter Call Graph', () => {
         // Array element calls (contracts[0].execute()) are complex
         // This is an acceptable limitation for 80/20 approach
         // We would need to track array types and resolve element types
-        const edge = graph.edges.find(e => e.from === callFirst?.id && e.to === execute?.id);
-        // Accept that we might not resolve array element calls
+        // const edge = graph.edges.find(e => e.from === callFirst?.id && e.to === execute?.id);
         // expect(edge).toBeDefined();
     });
 
@@ -497,8 +518,8 @@ describe('SolidityAdapter Call Graph', () => {
         const files: FileContent[] = [{ path: '/test.sol', content: code }];
         const graph = await adapter.generateCallGraph(files);
 
-        const calculate = graph.nodes.find(n => n.label === 'calculate');
-        const add = graph.nodes.find(n => n.label === 'add');
+        const calculate = graph.nodes.find(n => n.id.includes('calculate'));
+        const add = graph.nodes.find(n => n.id.includes('add'));
 
         expect(calculate).toBeDefined();
         expect(add).toBeDefined();
@@ -506,6 +527,8 @@ describe('SolidityAdapter Call Graph', () => {
         // Should identify the library call
         const edge = graph.edges.find(e => e.from === calculate?.id && e.to === add?.id);
         expect(edge).toBeDefined();
+        // SafeMath.add is internal
+        expect(edge?.kind).toBe('internal');
     });
 
     it('should handle fallback and receive functions', async () => {
@@ -525,9 +548,9 @@ describe('SolidityAdapter Call Graph', () => {
         const files: FileContent[] = [{ path: '/test.sol', content: code }];
         const graph = await adapter.generateCallGraph(files);
 
-        const helper = graph.nodes.find(n => n.label === 'helper');
-        const fallbackFunc = graph.nodes.find(n => n.label === 'fallback');
-        const receiveFunc = graph.nodes.find(n => n.label === 'receive');
+        const helper = graph.nodes.find(n => n.id.includes('helper'));
+        const fallbackFunc = graph.nodes.find(n => n.id.includes('fallback'));
+        const receiveFunc = graph.nodes.find(n => n.id.includes('receive'));
 
         expect(helper).toBeDefined();
         expect(fallbackFunc).toBeDefined();
@@ -557,8 +580,8 @@ describe('SolidityAdapter Call Graph', () => {
         const files: FileContent[] = [{ path: '/test.sol', content: code }];
         const graph = await adapter.generateCallGraph(files);
 
-        const forward = graph.nodes.find(n => n.label === 'forward');
-        const execute = graph.nodes.find(n => n.label === 'execute');
+        const forward = graph.nodes.find(n => n.id.includes('forward'));
+        const execute = graph.nodes.find(n => n.id.includes('execute'));
 
         expect(forward).toBeDefined();
         expect(execute).toBeDefined();
@@ -588,8 +611,8 @@ describe('SolidityAdapter Call Graph', () => {
         const files: FileContent[] = [{ path: '/test.sol', content: code }];
         const graph = await adapter.generateCallGraph(files);
 
-        const asm = graph.nodes.find(n => n.label === 'asm');
-        const helper = graph.nodes.find(n => n.label === 'helper');
+        const asm = graph.nodes.find(n => n.id.includes('asm'));
+        const helper = graph.nodes.find(n => n.id.includes('helper'));
 
         expect(asm).toBeDefined();
         expect(helper).toBeDefined();

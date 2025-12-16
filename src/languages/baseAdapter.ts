@@ -29,6 +29,10 @@ export abstract class BaseAdapter implements LanguageAdapter {
         this.config = config;
     }
 
+    protected cleanSignature(raw: string): string {
+        return raw.replace(/\s+/g, ' ').trim();
+    }
+
     async extractEntrypoints(files: FileContent[]): Promise<Entrypoint[]> {
         return [];
     }
@@ -52,9 +56,11 @@ export abstract class BaseAdapter implements LanguageAdapter {
                 for (const match of matches) {
                     // Extract signature up to opening brace (handles multi-line signatures)
                     const braceIndex = match.text.indexOf('{');
-                    const signature = braceIndex !== -1
-                        ? match.text.substring(0, braceIndex).trim()
-                        : match.text.trim();
+                    const rawSignature = braceIndex !== -1
+                        ? match.text.substring(0, braceIndex)
+                        : match.text;
+
+                    const signature = this.cleanSignature(rawSignature);
 
                     // Truncate to 80 characters max
                     const truncated = signature.length > 80

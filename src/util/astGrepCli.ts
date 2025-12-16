@@ -50,15 +50,33 @@ export async function astGrep(options: AstGrepOptions): Promise<AstGrepMatch[]> 
     // This path is relative to src/util/astGrepCli.ts -> ../../node_modules
     const nodeModulesBinary = path.join(__dirname, "../../node_modules/.bin/ast-grep");
 
-    // Use bundled binary if it exists, otherwise fall back to node_modules
-    const astGrepBin = fs.existsSync(bundledBinary) ? bundledBinary : nodeModulesBinary;
+    // Check for platform-specific package in node_modules (when .bin link is missing)
+    let platformPackageSuffix = "";
+    if (platform === "linux") {
+        platformPackageSuffix = "-gnu";
+    } else if (platform === "win32") {
+        platformPackageSuffix = "-msvc";
+    }
+    const platformPackageName = `cli-${platform}-${arch}${platformPackageSuffix}`;
+    const localPackageBinary = path.join(__dirname, `../../node_modules/@ast-grep/${platformPackageName}/ast-grep${platform === "win32" ? ".exe" : ""}`);
+
+    // Use bundled binary if it exists, try platform specific package, otherwise fall back to node_modules .bin
+    let astGrepBin = "";
+    if (fs.existsSync(bundledBinary)) {
+        astGrepBin = bundledBinary;
+    } else if (fs.existsSync(localPackageBinary)) {
+        astGrepBin = localPackageBinary;
+    } else {
+        astGrepBin = nodeModulesBinary;
+    }
 
     // Check if binary exists
     if (!fs.existsSync(astGrepBin)) {
         throw new Error(
             `ast-grep binary not found. Tried:\n` +
             `  - ${bundledBinary} (bundled)\n` +
-            `  - ${nodeModulesBinary} (node_modules)\n` +
+            `  - ${localPackageBinary} (local package)\n` +
+            `  - ${nodeModulesBinary} (node_modules .bin)\n` +
             `Run 'npm install' to install dependencies or 'npm run prepare' to bundle the binary.`
         );
     }

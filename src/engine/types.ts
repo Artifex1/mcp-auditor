@@ -15,31 +15,39 @@ export interface Entrypoint {
     name: string;
     signature: string;
     visibility: string;
-    location: {
-        line: number;
-        column: number;
-    };
+    id: string;
 }
-
-
 
 export interface FileContent {
     path: string;
     content: string;
 }
 
+export interface Position {
+    line: number;
+    column: number;
+}
+
+export interface Range {
+    start: Position;
+    end: Position;
+}
+
 export interface GraphNode {
     id: string; // Fully qualified signature (e.g., "MyContract.myFunc(uint256)")
-    label: string; // Human readable name
+    label: string; // Function name
     file: string;
     contract?: string;
-    visibility?: 'public' | 'external' | 'internal' | 'private';
-    range: { start: { line: number, column: number }, end: { line: number, column: number } };
+    range?: Range;
+    visibility: 'public' | 'external' | 'internal' | 'private';
+    text?: string;
+    containerKind?: 'contract' | 'interface' | 'library';
 }
 
 export interface GraphEdge {
     from: string; // node id
     to: string; // node id
+    kind?: 'internal' | 'external';
 }
 
 export interface CallGraph {

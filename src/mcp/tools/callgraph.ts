@@ -15,11 +15,20 @@ export function createCallGraphHandler(engine: Engine) {
     ) => {
         const graph = await engine.processCallGraph(paths);
 
+        // Minify graph for output
+        const reducedGraph = {
+            nodes: graph.nodes.map(n => ({
+                id: n.id,
+                visibility: n.visibility
+            })),
+            edges: graph.edges
+        };
+
         return {
             content: [
                 {
                     type: "text" as const,
-                    text: encode({ call_graph: graph })
+                    text: encode({ call_graph: reducedGraph })
                 }
             ]
         };

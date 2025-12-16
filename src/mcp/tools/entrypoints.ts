@@ -17,10 +17,15 @@ export function createEntrypointsHandler(engine: Engine) {
     ): Promise<CallToolResult> => {
         try {
             const entrypoints = await engine.processEntrypoints(paths);
+            const minimalEntrypoints = entrypoints.map(e => ({
+                id: e.id,
+                visibility: e.visibility
+            }));
+
             return {
                 content: [{
                     type: "text",
-                    text: encode({ entrypoints })
+                    text: encode({ entrypoints: minimalEntrypoints })
                 }]
             };
         } catch (error) {

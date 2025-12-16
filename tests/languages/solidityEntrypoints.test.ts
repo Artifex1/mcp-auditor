@@ -22,15 +22,15 @@ describe('SolidityAdapter - Entrypoint Extraction', () => {
 
         expect(entrypoints.length).toBeGreaterThan(0);
 
-        // Check for specific functions
-        const functionNames = entrypoints.map(e => e.name);
-        expect(functionNames).toContain('deposit');
-        expect(functionNames).toContain('withdraw');
-        expect(functionNames).toContain('getBalance');
+        // Check for specific functions by ID
+        const ids = entrypoints.map(e => e.id);
+        expect(ids).toContain('SimpleVault.deposit(uint256 amount)');
+        expect(ids).toContain('SimpleVault.withdraw(uint256 amount)');
+        expect(ids).toContain('SimpleVault.getBalance()');
 
         // Should NOT contain private or internal functions
-        expect(functionNames).not.toContain('_internalHelper');
-        expect(functionNames).not.toContain('privateFunction');
+        expect(ids).not.toContain('SimpleVault._internalHelper()');
+        expect(ids).not.toContain('SimpleVault.privateFunction()');
     });
 
     it('should extract correct visibility', async () => {
@@ -43,10 +43,10 @@ describe('SolidityAdapter - Entrypoint Extraction', () => {
             { path: 'SimpleVault.sol', content: code }
         ]);
 
-        const deposit = entrypoints.find(e => e.name === 'deposit');
+        const deposit = entrypoints.find(e => e.id === 'SimpleVault.deposit(uint256 amount)');
         expect(deposit?.visibility).toBe('external');
 
-        const withdraw = entrypoints.find(e => e.name === 'withdraw');
+        const withdraw = entrypoints.find(e => e.id === 'SimpleVault.withdraw(uint256 amount)');
         expect(withdraw?.visibility).toBe('public');
     });
 
@@ -65,7 +65,7 @@ describe('SolidityAdapter - Entrypoint Extraction', () => {
         });
     });
 
-    it('should extract location information', async () => {
+    it('should assign consistent ids', async () => {
         const code = `contract Test {
     function foo() public {}
 }`;
@@ -75,8 +75,7 @@ describe('SolidityAdapter - Entrypoint Extraction', () => {
         ]);
 
         expect(entrypoints.length).toBe(1);
-        expect(entrypoints[0].location.line).toBeGreaterThan(0);
-        expect(entrypoints[0].location.column).toBeGreaterThanOrEqual(0);
+        expect(entrypoints[0].id).toBe('Test.foo()');
     });
 
     it('should detect contract name inside abstract contracts', async () => {

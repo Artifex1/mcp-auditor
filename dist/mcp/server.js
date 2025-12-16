@@ -25351,12 +25351,28 @@ async function astGrep(options) {
   const bundledBinaryName = `ast-grep-${platform}-${arch}${platform === "win32" ? ".exe" : ""}`;
   const bundledBinary = path3.join(__dirname2, "../bin", bundledBinaryName);
   const nodeModulesBinary = path3.join(__dirname2, "../../node_modules/.bin/ast-grep");
-  const astGrepBin = fs2.existsSync(bundledBinary) ? bundledBinary : nodeModulesBinary;
+  let platformPackageSuffix = "";
+  if (platform === "linux") {
+    platformPackageSuffix = "-gnu";
+  } else if (platform === "win32") {
+    platformPackageSuffix = "-msvc";
+  }
+  const platformPackageName = `cli-${platform}-${arch}${platformPackageSuffix}`;
+  const localPackageBinary = path3.join(__dirname2, `../../node_modules/@ast-grep/${platformPackageName}/ast-grep${platform === "win32" ? ".exe" : ""}`);
+  let astGrepBin = "";
+  if (fs2.existsSync(bundledBinary)) {
+    astGrepBin = bundledBinary;
+  } else if (fs2.existsSync(localPackageBinary)) {
+    astGrepBin = localPackageBinary;
+  } else {
+    astGrepBin = nodeModulesBinary;
+  }
   if (!fs2.existsSync(astGrepBin)) {
     throw new Error(
       `ast-grep binary not found. Tried:
   - ${bundledBinary} (bundled)
-  - ${nodeModulesBinary} (node_modules)
+  - ${localPackageBinary} (local package)
+  - ${nodeModulesBinary} (node_modules .bin)
 Run 'npm install' to install dependencies or 'npm run prepare' to bundle the binary.`
     );
   }
@@ -25431,6 +25447,9 @@ var BaseAdapter = class {
     this.languageId = config2.languageId;
     this.config = config2;
   }
+  cleanSignature(raw) {
+    return raw.replace(/\s+/g, " ").trim();
+  }
   async extractEntrypoints(files) {
     return [];
   }
@@ -25449,7 +25468,8 @@ var BaseAdapter = class {
         const signatures = [];
         for (const match of matches) {
           const braceIndex = match.text.indexOf("{");
-          const signature = braceIndex !== -1 ? match.text.substring(0, braceIndex).trim() : match.text.trim();
+          const rawSignature = braceIndex !== -1 ? match.text.substring(0, braceIndex) : match.text;
+          const signature = this.cleanSignature(rawSignature);
           const truncated = signature.length > 80 ? signature.substring(0, 77) + "..." : signature;
           signatures.push(truncated);
         }
@@ -26001,12 +26021,9 @@ var SolidityAdapter = class _SolidityAdapter extends BaseAdapter {
       file: node.file,
       contract: node.contract || "Unknown",
       name: node.label,
-      signature: node.id.includes(".") ? node.id.split(".").pop() : node.id,
+      signature: this.cleanSignature(node.id.includes(".") ? node.id.split(".").pop() : node.id),
       visibility: node.visibility,
-      location: {
-        line: node.range.start.line,
-        column: node.range.start.column
-      }
+      id: node.id
     }));
   }
   async generateCallGraph(files) {
@@ -26014,7 +26031,8 @@ var SolidityAdapter = class _SolidityAdapter extends BaseAdapter {
     const edges = [];
     await this.buildSymbolTable(files);
     await this.identifyCalls(edges);
-    return { nodes: Array.from(this.symbolTable.values()), edges };
+    const nodes = Array.from(this.symbolTable.values());
+    return { nodes, edges };
   }
   resetState() {
     this.symbolTable.clear();
@@ -26084,11 +26102,23 @@ var SolidityAdapter = class _SolidityAdapter extends BaseAdapter {
       if (!funcName) continue;
       const memberName = config2.extractMember ? call.metaVariables?.single?.RECV?.text : void 0;
       if (this.shouldSkipCall(funcName, memberName, config2.callType)) continue;
-      const calleeId = this.resolveCall(config2.callType, funcName, memberName, node);
-      if (calleeId) {
-        edges.push({ from: node.id, to: calleeId });
+      const calleeNode = this.resolveCallNode(config2.callType, funcName, memberName, node);
+      if (calleeNode) {
+        const kind = this.determineEdgeKind(config2.callType, calleeNode);
+        edges.push({ from: node.id, to: calleeNode.id, kind });
       }
     }
+  }
+  determineEdgeKind(callType, callee) {
+    if (callType === 2 /* This */) return "external";
+    if (callType === 3 /* Super */) return "internal";
+    if (callType === 0 /* Simple */) {
+      return "internal";
+    }
+    if (callee.containerKind === "library") {
+      return callee.visibility === "internal" ? "internal" : "external";
+    }
+    return "external";
   }
   async processAssemblyCalls(node, edges) {
     const codeToSearch = `contract C { ${node.text} }`;
@@ -26105,9 +26135,9 @@ var SolidityAdapter = class _SolidityAdapter extends BaseAdapter {
       const parenIndex = text.indexOf("(");
       if (parenIndex === -1) continue;
       const callName = text.substring(0, parenIndex).trim();
-      const calleeId = this.resolveCall(0 /* Simple */, callName, void 0, node);
-      if (calleeId) {
-        edges.push({ from: node.id, to: calleeId });
+      const calleeNode = this.resolveCallNode(0 /* Simple */, callName, void 0, node);
+      if (calleeNode) {
+        edges.push({ from: node.id, to: calleeNode.id, kind: "internal" });
       }
     }
   }
@@ -26117,7 +26147,7 @@ var SolidityAdapter = class _SolidityAdapter extends BaseAdapter {
     if (callType === 0 /* Simple */ && funcName.includes(".")) return true;
     return false;
   }
-  resolveCall(type, name, memberName, caller) {
+  resolveCallNode(type, name, memberName, caller) {
     switch (type) {
       case 3 /* Super */:
         return this.resolveSuperCall(name, caller);
@@ -26135,19 +26165,19 @@ var SolidityAdapter = class _SolidityAdapter extends BaseAdapter {
     if (!parents?.length) return void 0;
     for (const parent of parents) {
       const func = this.findInContract(parent, name);
-      if (func) return func.id;
+      if (func) return func;
     }
     return void 0;
   }
   resolveMemberCall(name, memberName, caller) {
     const func = this.findInContract(memberName, name);
-    if (func) return func.id;
+    if (func) return func;
     if (caller.contract) {
       const libraries = this.usingForMap.get(caller.contract);
       if (libraries) {
         for (const lib of libraries) {
           const libFunc = this.findInContract(lib, name);
-          if (libFunc) return libFunc.id;
+          if (libFunc) return libFunc;
         }
       }
     }
@@ -26156,15 +26186,15 @@ var SolidityAdapter = class _SolidityAdapter extends BaseAdapter {
   resolveLocalOrInheritedCall(name, caller) {
     if (caller.contract) {
       const local = this.findInContract(caller.contract, name);
-      if (local) return local.id;
+      if (local) return local;
       const inherited = this.resolveInheritedCall(name, caller.contract);
-      if (inherited) return inherited.id;
+      if (inherited) return inherited;
     }
     const freeFuncs = this.symbolsByLabel.get(name);
     const free = freeFuncs?.find((n) => !n.contract);
-    if (free) return free.id;
+    if (free) return free;
     const any = this.symbolsByLabel.get(name)?.[0];
-    return any?.id;
+    return any;
   }
   resolveInheritedCall(name, contract, visited = /* @__PURE__ */ new Set()) {
     if (visited.has(contract)) return void 0;
@@ -26246,33 +26276,36 @@ var SolidityAdapter = class _SolidityAdapter extends BaseAdapter {
       }
     };
     for (const file of files) {
-      const contracts = [
-        ...await astGrep({ rule: contractRule, code: file.content }),
-        ...await astGrep({ rule: interfaceRule, code: file.content }),
-        ...await astGrep({ rule: libraryRule, code: file.content })
+      const contractMatches = await astGrep({ rule: contractRule, code: file.content });
+      const interfaceMatches = await astGrep({ rule: interfaceRule, code: file.content });
+      const libraryMatches = await astGrep({ rule: libraryRule, code: file.content });
+      const allContainers = [
+        ...contractMatches.map((c) => ({ match: c, kind: "contract" })),
+        ...interfaceMatches.map((c) => ({ match: c, kind: "interface" })),
+        ...libraryMatches.map((c) => ({ match: c, kind: "library" }))
       ];
-      for (const contract of contracts) {
-        const contractName = contract.metaVariables?.single?.NAME?.text;
+      for (const { match: container, kind } of allContainers) {
+        const contractName = container.metaVariables?.single?.NAME?.text;
         if (!contractName) continue;
-        const parentsText = contract.metaVariables?.multi?.PARENTS?.map((p) => p.text).filter((t) => t !== ",").map((t) => t.trim()) || [];
+        const parentsText = container.metaVariables?.multi?.PARENTS?.map((p) => p.text).filter((t) => t !== ",").map((t) => t.trim()) || [];
         if (parentsText.length > 0) {
           this.inheritanceGraph.set(contractName, parentsText);
         }
-        const usingDirectives = await astGrep({ rule: usingRule, code: contract.text });
+        const usingDirectives = await astGrep({ rule: usingRule, code: container.text });
         const libs = usingDirectives.map((d) => d.metaVariables?.single?.LIB?.text).filter((t) => !!t);
         if (libs.length > 0) {
           this.usingForMap.set(contractName, libs);
         }
-        const functions = await astGrep({ rule: regularFunctionRule, code: contract.text });
-        const fallbackReceives = await astGrep({ rule: fallbackReceiveRule, code: contract.text });
+        const functions = await astGrep({ rule: regularFunctionRule, code: container.text });
+        const fallbackReceives = await astGrep({ rule: fallbackReceiveRule, code: container.text });
         for (const fn of functions) {
-          this.indexSymbol(this.createFunctionNode(fn, file.path, contractName, contract.range.start.line));
+          this.indexSymbol(this.createFunctionNode(fn, file.path, kind, contractName, container.range.start.line));
         }
         for (const fn of fallbackReceives) {
           const text = fn.text.trim();
           const name = text.includes("receive") ? "receive" : "fallback";
           const mockFn = { ...fn, metaVariables: { single: { NAME: { text: name } }, multi: { PARAMS: [], MODIFIERS: [{ text: "external" }] } } };
-          this.indexSymbol(this.createFunctionNode(mockFn, file.path, contractName, contract.range.start.line));
+          this.indexSymbol(this.createFunctionNode(mockFn, file.path, kind, contractName, container.range.start.line));
         }
       }
       const freeFunctions = await astGrep({ rule: freeFunctionRule, code: file.content });
@@ -26281,21 +26314,30 @@ var SolidityAdapter = class _SolidityAdapter extends BaseAdapter {
       }
     }
   }
-  createFunctionNode(fn, file, contract, baseLineOffset = 0) {
+  createFunctionNode(fn, file, containerKind, contract, baseLineOffset = 0) {
     const fnName = fn.metaVariables?.single?.NAME?.text;
+    let params = fn.metaVariables?.multi?.PARAMS?.map((p) => p.text).join("") || "";
+    if (!params && fn.text) {
+      const openParen = fn.text.indexOf("(");
+      const closeParen = fn.text.indexOf(")");
+      if (openParen !== -1 && closeParen !== -1 && closeParen > openParen) {
+        params = fn.text.substring(openParen + 1, closeParen);
+      }
+    }
     const modifiers = fn.metaVariables?.multi?.MODIFIERS?.map((m) => m.text) ?? [];
     const visibility = modifiers.find(
       (m) => ["external", "public", "internal", "private"].includes(m)
     );
-    const params = fn.metaVariables?.multi?.PARAMS?.map((p) => p.text).join("") || "";
     const signature = `${fnName}(${params})`;
     const id = contract ? `${contract}.${signature}` : signature;
+    const finalVisibility = visibility ?? (containerKind === "interface" ? "external" : "internal");
     return {
       id,
       label: fnName,
       file,
       contract,
-      visibility,
+      containerKind,
+      visibility: finalVisibility,
       range: {
         start: { line: baseLineOffset + fn.range.start.line + 1, column: fn.range.start.column },
         end: { line: baseLineOffset + fn.range.end.line + 1, column: fn.range.end.column }
@@ -26688,10 +26730,14 @@ function createEntrypointsHandler(engine2) {
   return async ({ paths }) => {
     try {
       const entrypoints = await engine2.processEntrypoints(paths);
+      const minimalEntrypoints = entrypoints.map((e) => ({
+        id: e.id,
+        visibility: e.visibility
+      }));
       return {
         content: [{
           type: "text",
-          text: encode({ entrypoints })
+          text: encode({ entrypoints: minimalEntrypoints })
         }]
       };
     } catch (error) {
@@ -26787,11 +26833,18 @@ var callGraphSchema = {
 function createCallGraphHandler(engine2) {
   return async ({ paths }) => {
     const graph = await engine2.processCallGraph(paths);
+    const reducedGraph = {
+      nodes: graph.nodes.map((n) => ({
+        id: n.id,
+        visibility: n.visibility
+      })),
+      edges: graph.edges
+    };
     return {
       content: [
         {
           type: "text",
-          text: encode({ call_graph: graph })
+          text: encode({ call_graph: reducedGraph })
         }
       ]
     };
