@@ -12,6 +12,7 @@ import { CompactAdapter } from "../languages/compactAdapter.js";
 import { MoveAdapter } from "../languages/moveAdapter.js";
 import { NoirAdapter } from "../languages/noirAdapter.js";
 import { TolkAdapter } from "../languages/tolkAdapter.js";
+import { FlowAdapter, JavaScriptAdapter, TsxAdapter, TypeScriptAdapter } from "../languages/javascriptAdapter.js";
 import { createEntrypointsHandler, entrypointsSchema } from "./tools/entrypoints.js";
 import { createPeekHandler, peekSchema } from "./tools/peek.js";
 import { createMetricsHandler, metricsSchema } from "./tools/metrics.js";
@@ -29,6 +30,10 @@ engine.registerAdapter(new CompactAdapter());
 engine.registerAdapter(new MoveAdapter());
 engine.registerAdapter(new NoirAdapter());
 engine.registerAdapter(new TolkAdapter());
+engine.registerAdapter(new JavaScriptAdapter());
+engine.registerAdapter(new TypeScriptAdapter());
+engine.registerAdapter(new TsxAdapter());
+engine.registerAdapter(new FlowAdapter());
 
 // Create server instance
 const server = new McpServer({

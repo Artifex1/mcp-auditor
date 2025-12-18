@@ -1,6 +1,10 @@
 export enum SupportedLanguage {
     Solidity = "solidity",
     Cpp = "cpp",
+    JavaScript = "javascript",
+    TypeScript = "typescript",
+    Tsx = "tsx",
+    Flow = "flow",
     Java = "java",
     Go = "go",
     Rust = "rust",

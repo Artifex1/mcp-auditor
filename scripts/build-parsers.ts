@@ -10,65 +10,127 @@ const ROOT_DIR = path.join(__dirname, '..');
 const GRAMMARS_DIR = path.join(ROOT_DIR, 'vendor', 'grammars');
 const PARSERS_DIR = path.join(ROOT_DIR, 'dist', 'mcp', 'parsers');
 
+// Use the host project's CLI to avoid version conflicts within submodules
+const TREE_SITTER_CLI = path.resolve(ROOT_DIR, 'node_modules', '.bin', 'tree-sitter');
+
 const filter = process.argv[2];
 
-// Languages to build. 
-const languages = fs.readdirSync(GRAMMARS_DIR).filter(name => {
-    const isTarget = fs.statSync(path.join(GRAMMARS_DIR, name)).isDirectory() && name.startsWith('tree-sitter-');
-    if (!isTarget) return false;
-    if (filter && !name.includes(filter)) return false;
-    return true;
-});
-
-// Create parsers directory if it doesn't exist
 if (!fs.existsSync(PARSERS_DIR)) {
     fs.mkdirSync(PARSERS_DIR, { recursive: true });
 }
 
-console.log(`Found ${languages.length} grammars to build.`);
+interface GrammarTarget {
+    path: string;
+    folderName: string;
+}
 
-for (const langDir of languages) {
-    const langPath = path.join(GRAMMARS_DIR, langDir);
-    const langName = langDir.replace('tree-sitter-', '');
-    // const wasmFile = `tree-sitter-${langName}.wasm`; // This is no longer needed here as it's dynamically found
-    // const targetPath = path.join(PARSERS_DIR, wasmFile); // This is redefined inside the try block
-
-    console.log(`Building ${langName}...`);
-
+/**
+ * Recursively finds directories containing a 'grammar.js' file.
+ * Optimization: Uses withFileTypes to avoid extra stat calls.
+ */
+function findGrammarPaths(dir: string): GrammarTarget[] {
+    let entries: fs.Dirent[];
     try {
-        // Generate parser if needed
-        console.log(`  Generating parser...`);
-        execSync(`npx tree-sitter generate`, {
-            cwd: langPath,
-            stdio: 'inherit'
-        });
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (e) {
+        return [];
+    }
 
-        console.log(`  Building WASM...`);
-        execSync(`npx tree-sitter build --wasm`, {
-            cwd: langPath,
-            stdio: 'inherit'
-        });
+    // specific check: if this dir has grammar.js, we stop here.
+    if (entries.some(e => e.name === 'grammar.js' && e.isFile())) {
+        return [{
+            path: dir,
+            folderName: path.basename(dir)
+        }];
+    }
 
-        // Scan for any .wasm file in the directory
-        const files = fs.readdirSync(langPath);
-        const wasmFiles = files.filter(f => f.endsWith('.wasm'));
-
-        if (wasmFiles.length > 0) {
-            // If multiple, try to find the one that matches our expectations or just the first one
-            const sourceFile = wasmFiles.find(f => f.includes(langName)) || wasmFiles[0];
-            const sourcePath = path.join(langPath, sourceFile);
-
-            // We want to keep our naming convention in lib/parsers: tree-sitter-<lang>.wasm
-            // Using the directory name as the base for consistency.
-            const targetPath = path.join(PARSERS_DIR, `${langDir}.wasm`);
-
-            fs.renameSync(sourcePath, targetPath);
-            console.log(`  ✓ Successfully built and moved ${sourceFile} to ${targetPath}`);
-        } else {
-            console.error(`  ✗ Error: No .wasm file found in ${langPath} after build.`);
+    let results: GrammarTarget[] = [];
+    for (const entry of entries) {
+        if (entry.isDirectory() && entry.name !== 'node_modules' && !entry.name.startsWith('.')) {
+            results = results.concat(findGrammarPaths(path.join(dir, entry.name)));
         }
-    } catch (error) {
-        console.error(`  ✗ Error building ${langName}:`, error);
+    }
+    return results;
+}
+
+// Optimization: We scan ALL vendor dirs first, then filter by the Resolved Name later.
+// This allows filtering for 'tsx' even if it lives inside 'tree-sitter-typescript'.
+const vendorDirs = fs.readdirSync(GRAMMARS_DIR).filter(name => 
+    fs.statSync(path.join(GRAMMARS_DIR, name)).isDirectory()
+);
+
+console.log(`Scanning ${vendorDirs.length} vendor folders...`);
+
+for (const vendorName of vendorDirs) {
+    const vendorPath = path.join(GRAMMARS_DIR, vendorName);
+    const grammarTargets = findGrammarPaths(vendorPath);
+
+    if (grammarTargets.length === 0) {
+        // Quietly skip empty/utility folders unless verbose
+        continue;
+    }
+
+    for (const target of grammarTargets) {
+        let langName = target.folderName;
+        if (langName === 'src') continue; 
+
+        // Naming Normalization Logic
+        if (!langName.startsWith('tree-sitter-')) {
+            // If the parent folder (vendorName) matches the target folder (e.g. tree-sitter-python/tree-sitter-python)
+            // or if we are in a subfolder like 'typescript/tsx'
+            if (vendorName.startsWith('tree-sitter-') && vendorName.includes(langName)) {
+                 langName = `tree-sitter-${langName}`;
+            } else if (vendorName.startsWith('tree-sitter-')) {
+                 // Fallback for monorepos: tree-sitter-typescript/tsx -> tree-sitter-tsx
+                 langName = `tree-sitter-${langName}`;
+            } else {
+                 langName = vendorName;
+            }
+        }
+
+        // Optimization: Apply filter HERE, after we know the real language name
+        if (filter && !langName.includes(filter)) {
+            continue;
+        }
+
+        console.log(`Processing ${langName}...`);
+
+        try {
+            // CHECK: Does src/parser.c exist?
+            // If missing, we generate it (fixes 'tolk').
+            // If present, we skip 'generate' to avoid 'emcc' errors (fixes 'javascript').
+            const parserCPath = path.join(target.path, 'src', 'parser.c');
+            
+            if (!fs.existsSync(parserCPath)) {
+                console.log(`  ! src/parser.c missing. Running 'generate'...`);
+                execSync(`"${TREE_SITTER_CLI}" generate`, {
+                    cwd: target.path,
+                    stdio: ['ignore', 'inherit', 'inherit'] 
+                });
+            }
+
+            console.log(`  Building WASM...`);
+            execSync(`"${TREE_SITTER_CLI}" build --wasm`, {
+                cwd: target.path,
+                stdio: ['ignore', 'inherit', 'inherit']
+            });
+
+            // Find output file (it is usually named tree-sitter-<lang>.wasm or just <lang>.wasm)
+            const files = fs.readdirSync(target.path);
+            const wasmFile = files.find(f => f.endsWith('.wasm'));
+
+            if (wasmFile) {
+                const sourcePath = path.join(target.path, wasmFile);
+                const destPath = path.join(PARSERS_DIR, `${langName}.wasm`);
+                fs.renameSync(sourcePath, destPath);
+                console.log(`  ✓ Success: ${destPath}`);
+            } else {
+                console.error(`  ✗ Error: No .wasm file produced for ${langName}`);
+            }
+
+        } catch (error) {
+            console.error(`  ✗ Failed to build ${langName}`);
+        }
     }
 }
 

@@ -26,6 +26,17 @@ export class Engine {
             case ".c":
             case ".h":
                 return SupportedLanguage.Cpp;
+            case ".js":
+            case ".jsx":
+            case ".mjs":
+            case ".cjs":
+                return SupportedLanguage.JavaScript;
+            case ".ts":
+                return SupportedLanguage.TypeScript;
+            case ".tsx":
+                return SupportedLanguage.Tsx;
+            case ".flow":
+                return SupportedLanguage.Flow;
             case ".java":
                 return SupportedLanguage.Java;
             case ".go":

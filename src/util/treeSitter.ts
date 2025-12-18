@@ -88,6 +88,14 @@ export class TreeSitterService {
                 return 'tree-sitter-rust.wasm';
             case SupportedLanguage.Cpp:
                 return 'tree-sitter-cpp.wasm';
+            case SupportedLanguage.JavaScript:
+                return 'tree-sitter-javascript.wasm';
+            case SupportedLanguage.TypeScript:
+                return 'tree-sitter-typescript.wasm';
+            case SupportedLanguage.Tsx:
+                return 'tree-sitter-tsx.wasm';
+            case SupportedLanguage.Flow:
+                return 'tree-sitter-flow.wasm';
             case SupportedLanguage.Cairo:
                 return 'tree-sitter-cairo.wasm';
             case SupportedLanguage.Compact:
