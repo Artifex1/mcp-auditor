@@ -55,6 +55,10 @@ Generate professional audit reports in OpenZeppelin style
 | ☕ **Java** | ❌ | ✅ | ⏳ | ✅ | Partial |
 | 🐹 **Go** | ❌ | ✅ | ⏳ | ✅ | Partial |
 | 🦀 **Rust** | ❌ | ✅ | ⏳ | ✅ | Partial |
+| 🟨 **JavaScript** | ❌ | ✅ | ⏳ | ✅ | Partial |
+| 🔷 **TypeScript** | ❌ | ✅ | ⏳ | ✅ | Partial |
+| 🧩 **TSX** | ❌ | ✅ | ⏳ | ✅ | Partial |
+| 🌀 **Flow** | ❌ | ✅ | ⏳ | ✅ | Partial |
 
 </div>
 
