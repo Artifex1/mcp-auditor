@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/mcp/server.js",
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && tsx scripts/copy-wasm.ts",
     "clean": "rm -rf dist",
     "build-parsers": "tsx scripts/build-parsers.ts",
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
