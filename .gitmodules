@@ -16,9 +16,6 @@
 [submodule "vendor/grammars/tree-sitter-cairo"]
 	path = vendor/grammars/tree-sitter-cairo
 	url = git@github.com:starkware-libs/tree-sitter-cairo.git
-[submodule "vendor/grammars/tree-sitter-vyper"]
-	path = vendor/grammars/tree-sitter-vyper
-	url = git@github.com:madlabman/tree-sitter-vyper.git
 [submodule "vendor/grammars/tree-sitter-move-sui"]
 	path = vendor/grammars/tree-sitter-move-sui
 	url = git@github.com:poelzi/tree-sitter-move-sui.git
